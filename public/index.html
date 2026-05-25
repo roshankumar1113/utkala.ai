@@ -1,0 +1,2336 @@
+<!DOCTYPE html>
+<html lang="or">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Utkal.ai | Universal Knowledge & Schemes Portal</title>
+  <!-- Google Fonts: Outfit (modern display tech) & Inter (high body legibility) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    /* --------------------------------------------------
+       CSS CUSTOM PROPERTIES & GLASSMORPHIC DESIGN SYSTEM
+       -------------------------------------------------- */
+    :root {
+      --bg-dark-950: #020617;
+      --bg-dark-900: #090d16;
+      --bg-dark-800: #0f172a;
+      --bg-dark-700: #1e293b;
+      
+      --accent-copper: #f59e0b;
+      --accent-copper-dark: #d97706;
+      --accent-copper-glow: rgba(245, 158, 11, 0.45);
+      
+      --accent-cyan: #06b6d4;
+      --accent-cyan-dark: #0891b2;
+      --accent-cyan-glow: rgba(6, 182, 212, 0.4);
+      
+      --accent-emerald: #10b981;
+      --accent-rose: #ef4444;
+      
+      --glass-bg: rgba(15, 23, 42, 0.65);
+      --glass-border: rgba(255, 255, 255, 0.06);
+      --glass-highlight: rgba(255, 255, 255, 0.02);
+      
+      --font-display: 'Outfit', 'Inter', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      
+      --chat-body-size: 13.5px;
+      --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-bounce: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.15);
+    }
+
+    /* Core Reset */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg-dark-950);
+      font-family: var(--font-body);
+      color: #f8fafc;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* --------------------------------------------------
+       SAMBALPURI IKKAT GEOMETRIC MESH OVERLAY
+       -------------------------------------------------- */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: -2;
+      background: radial-gradient(circle at 50% 10%, #0d172e 0%, var(--bg-dark-950) 100%);
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: -1;
+      opacity: 0.02;
+      pointer-events: none;
+      background-size: 36px 36px;
+      /* Sambalpuri Ikkat geometric structures */
+      background-image: 
+        linear-gradient(to right, rgba(255,255,255,0.4) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.4) 1px, transparent 1px),
+        linear-gradient(45deg, transparent 46%, rgba(255,255,255,0.5) 46%, rgba(255,255,255,0.5) 54%, transparent 54%),
+        linear-gradient(-45deg, transparent 46%, rgba(255,255,255,0.5) 46%, rgba(255,255,255,0.5) 54%, transparent 54%);
+    }
+
+    /* Decorative Glowing Orbs */
+    .orb-copper {
+      position: absolute;
+      width: 45vh;
+      height: 45vh;
+      top: 5%;
+      right: -10%;
+      background: radial-gradient(circle, var(--accent-copper-glow) 0%, transparent 70%);
+      filter: blur(80px);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .orb-cyan {
+      position: absolute;
+      width: 50vh;
+      height: 50vh;
+      bottom: 5%;
+      left: -15%;
+      background: radial-gradient(circle, var(--accent-cyan-glow) 0%, transparent 70%);
+      filter: blur(90px);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    /* --------------------------------------------------
+       LAYOUT ARCHITECTURE
+       -------------------------------------------------- */
+    .chat-app {
+      width: 95vw;
+      max-width: 1300px;
+      height: 92vh;
+      margin: 4vh auto;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 16px 20px 16px;
+      gap: 14px;
+      position: relative;
+    }
+
+    /* Header Bar */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 24px;
+      border-radius: 18px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+      transition: var(--transition-smooth);
+    }
+
+    .branding {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent-copper), var(--accent-copper-dark));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #020617;
+      font-family: var(--font-display);
+      font-size: 18px;
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+    }
+
+    .logo-text {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo-text span {
+      background: linear-gradient(to right, var(--accent-copper), #fbbf24);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .font-group {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .font-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
+      color: #94a3b8;
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: var(--transition-smooth);
+    }
+
+    .font-btn:hover {
+      background: rgba(6, 182, 212, 0.08);
+      border-color: rgba(6, 182, 212, 0.25);
+      color: var(--accent-cyan);
+    }
+
+    .clear-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
+      color: #94a3b8;
+      padding: 7px 14px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: var(--transition-smooth);
+    }
+
+    .clear-btn:hover {
+      background: rgba(239, 68, 68, 0.08);
+      border-color: rgba(239, 68, 68, 0.2);
+      color: var(--accent-rose);
+    }
+
+    .clear-btn svg {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 30px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--glass-border);
+      color: #94a3b8;
+    }
+
+    .status-badge.active {
+      color: var(--accent-emerald);
+      background: rgba(16, 185, 129, 0.08);
+      border-color: rgba(16, 185, 129, 0.2);
+    }
+
+    .status-badge.offline {
+      color: var(--accent-rose);
+      background: rgba(239, 68, 68, 0.08);
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      background-color: currentColor;
+      border-radius: 50%;
+    }
+
+    .status-badge.active .status-dot {
+      animation: pulse-green 2s infinite;
+    }
+
+    @keyframes pulse-green {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+      70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    /* --------------------------------------------------
+       CONVERSATION MESSAGE LOG CONTAINER
+       -------------------------------------------------- */
+    .conversation-viewport {
+      flex-grow: 1;
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 24px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: inset 0 1px 0 var(--glass-highlight), 0 10px 40px rgba(0, 0, 0, 0.3);
+      padding: 2.5rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      scroll-behavior: smooth;
+    }
+
+    .conversation-viewport::-webkit-scrollbar {
+      width: 5px;
+    }
+    .conversation-viewport::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .conversation-viewport::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+    .conversation-viewport::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    /* Welcome Splash Dashboard */
+    .welcome-card {
+      max-width: 640px;
+      margin: auto;
+      text-align: center;
+      padding: 35px 30px;
+      border-radius: 24px;
+      background: rgba(15, 23, 42, 0.45);
+      border: 1px dashed rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes fade-in-up {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .welcome-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 16px;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-copper);
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.05);
+    }
+
+    .welcome-icon svg {
+      width: 28px;
+      height: 28px;
+      fill: currentColor;
+    }
+
+    .welcome-title {
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: 0.3px;
+    }
+
+    .welcome-desc {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 8px;
+    }
+
+    .preset-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-top: 10px;
+      width: 100%;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 4px;
+    }
+
+    .preset-section-title.copper {
+      color: var(--accent-copper);
+    }
+
+    .welcome-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    .welcome-preset-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 16px;
+      text-align: left;
+      cursor: pointer;
+      transition: var(--transition-bounce);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .welcome-preset-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.04), transparent);
+      opacity: 0;
+      transition: var(--transition-smooth);
+    }
+
+    .welcome-preset-card:hover::before {
+      opacity: 1;
+    }
+
+    .welcome-preset-card:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(6, 182, 212, 0.25);
+      transform: translateY(-4px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+    }
+
+    .welcome-preset-card.copper:hover {
+      border-color: rgba(245, 158, 11, 0.25);
+    }
+
+    .preset-card-icon {
+      font-size: 20px;
+      margin-bottom: 2px;
+    }
+
+    .preset-card-title {
+      font-family: var(--font-display);
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .preset-card-desc {
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.45;
+    }
+
+    /* Message Bubbles */
+    .message-row {
+      display: flex;
+      width: 100%;
+      animation: slide-up-message 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes slide-up-message {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-row.user { justify-content: flex-end; }
+    .message-row.bot { justify-content: flex-start; }
+
+    .message-wrapper {
+      display: flex;
+      gap: 12px;
+      max-width: 82%;
+    }
+
+    .message-row.user .message-wrapper { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .message-row.user .avatar {
+      background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
+      border: 1px solid rgba(6, 182, 212, 0.4);
+      color: #ffffff;
+      font-size: 13px;
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.25);
+    }
+
+    .message-row.bot .avatar {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #020617;
+      font-size: 13px;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+    }
+
+    .message-bubble {
+      padding: 12px 18px;
+      border-radius: 20px;
+      font-size: var(--chat-body-size);
+      line-height: 1.58;
+      position: relative;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+      max-width: 100%;
+      word-wrap: break-word;
+      transition: var(--transition-smooth);
+    }
+
+    .message-row.user .message-bubble {
+      background: linear-gradient(135deg, #0f766e 0%, #0d9488 100%);
+      border: 1px solid rgba(13, 148, 136, 0.25);
+      border-radius: 20px 20px 4px 20px;
+      color: #ffffff;
+    }
+
+    .message-row.bot .message-bubble {
+      background: rgba(30, 41, 59, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px 20px 20px 4px;
+      color: #e2e8f0;
+      backdrop-filter: blur(8px);
+    }
+
+    /* Typing Loader */
+    .typing-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      height: 16px;
+      padding: 0 4px;
+    }
+
+    .typing-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--accent-cyan);
+      opacity: 0.4;
+      animation: typing-blink 1.4s infinite both;
+    }
+
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typing-blink {
+      0%, 100% { opacity: 0.4; transform: translateY(0); }
+      50% { opacity: 1; transform: translateY(-4px); }
+    }
+
+    /* --------------------------------------------------
+       USER INPUT CONSOLE
+       -------------------------------------------------- */
+    .input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-radius: 20px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      padding: 10px 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      position: relative;
+    }
+
+    .input-wrapper::before {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 24px;
+      right: 24px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+      opacity: 0;
+      transition: var(--transition-smooth);
+    }
+
+    .input-wrapper:focus-within::before { opacity: 0.7; }
+
+    .chat-textarea {
+      flex-grow: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      height: 24px;
+      max-height: 120px;
+      font-family: var(--font-body);
+      font-size: var(--chat-body-size);
+      color: #f8fafc;
+      padding: 3px 4px;
+      line-height: 1.45;
+    }
+
+    .chat-textarea::placeholder { color: #475569; }
+
+    .send-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      color: var(--accent-copper);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition-bounce);
+    }
+
+    .send-btn:hover {
+      background: var(--accent-copper);
+      color: #020617;
+      box-shadow: 0 0 15px var(--accent-copper-glow);
+      transform: scale(1.05);
+    }
+
+    .send-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .voice-mic-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(6, 182, 212, 0.08);
+      border: 1px solid rgba(6, 182, 212, 0.2);
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.05);
+      transition: var(--transition-bounce);
+      flex-shrink: 0;
+    }
+
+    .voice-mic-btn:hover {
+      background: var(--accent-cyan);
+      color: #020617;
+      box-shadow: 0 0 15px var(--accent-cyan-glow);
+      transform: scale(1.05);
+    }
+
+    .voice-mic-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    /* --------------------------------------------------
+       CINEMATIC LIVE VOICE CALL OVERLAY
+       -------------------------------------------------- */
+    .voice-call-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1000;
+      background: rgba(2, 4, 8, 0.9);
+      backdrop-filter: blur(35px);
+      -webkit-backdrop-filter: blur(35px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 60px 24px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-30px);
+      transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .voice-call-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .call-header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .call-brand-title {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(to right, #ffffff, var(--accent-copper));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .call-status-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      animation: label-glow 1.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes label-glow {
+      from { text-shadow: 0 0 5px rgba(6, 182, 212, 0.3); }
+      to { text-shadow: 0 0 15px rgba(6, 182, 212, 0.8); color: #22d3ee; }
+    }
+
+    /* THE BREATHING WAVEFORM RING SYSTEM */
+    .waveform-container {
+      position: relative;
+      width: 220px;
+      height: 220px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .ripple-circle {
+      position: absolute;
+      border-radius: 50%;
+      width: 100%;
+      height: 100%;
+      border: 2px solid transparent;
+      transition: all 0.5s ease;
+      pointer-events: none;
+    }
+
+    .call-center-btn {
+      position: relative;
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #090f1e 0%, #020408 100%);
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 
+        0 15px 35px rgba(0, 0, 0, 0.6), 
+        inset 0 1px 2px rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+      transition: all 0.3s ease;
+    }
+
+    .call-center-btn svg {
+      width: 38px;
+      height: 38px;
+      fill: var(--accent-copper);
+      filter: drop-shadow(0 0 8px var(--accent-copper-glow));
+      transition: all 0.3s ease;
+    }
+
+    /* ACTIVE AUDIO WAVEFORM SIMULATOR IN THE RING */
+    .soundwave-simulator {
+      position: absolute;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .soundwave-simulator .bar {
+      width: 3px;
+      height: 12px;
+      background-color: var(--accent-cyan);
+      border-radius: 20px;
+      opacity: 0;
+      transition: var(--transition-smooth);
+    }
+
+    @keyframes bounce-bar-cyan {
+      0%, 100% { height: 10px; transform: scaleY(1); opacity: 0.3; }
+      50% { height: 42px; transform: scaleY(1.2); opacity: 0.85; }
+    }
+
+    @keyframes bounce-bar-gold {
+      0%, 100% { height: 10px; transform: scaleY(1); opacity: 0.35; }
+      50% { height: 42px; transform: scaleY(1.2); opacity: 0.85; }
+    }
+
+    .waveform-container.listening .soundwave-simulator .bar {
+      background-color: var(--accent-copper);
+      opacity: 0.6;
+      animation: bounce-bar-gold 0.9s ease-in-out infinite;
+    }
+
+    .waveform-container.speaking .soundwave-simulator .bar {
+      background-color: var(--accent-cyan);
+      opacity: 0.7;
+      animation: bounce-bar-cyan 0.75s ease-in-out infinite;
+    }
+
+    .soundwave-simulator .bar-1 { animation-delay: 0.1s !important; }
+    .soundwave-simulator .bar-2 { animation-delay: 0.3s !important; }
+    .soundwave-simulator .bar-3 { animation-delay: 0.5s !important; }
+    .soundwave-simulator .bar-4 { animation-delay: 0.2s !important; }
+    .soundwave-simulator .bar-5 { animation-delay: 0.4s !important; }
+    .soundwave-simulator .bar-6 { animation-delay: 0.6s !important; }
+    .soundwave-simulator .bar-7 { animation-delay: 0.15s !important; }
+    .soundwave-simulator .bar-8 { animation-delay: 0.35s !important; }
+    .soundwave-simulator .bar-9 { animation-delay: 0.45s !important; }
+
+    /* Listening state ripples */
+    .waveform-container.listening .ripple-1 {
+      border-color: var(--accent-copper);
+      animation: breathing-ripple-1 2.5s ease-in-out infinite;
+    }
+    .waveform-container.listening .ripple-2 {
+      border-color: var(--accent-cyan);
+      animation: breathing-ripple-2 2.5s ease-in-out infinite;
+    }
+    .waveform-container.listening .call-center-btn {
+      border-color: var(--accent-copper);
+      box-shadow: 0 0 25px var(--accent-copper-glow);
+    }
+
+    @keyframes breathing-ripple-1 {
+      0%, 100% { transform: scale(0.9); opacity: 0.15; box-shadow: inset 0 0 15px rgba(245, 158, 11, 0.1); }
+      50% { transform: scale(1.2); opacity: 0.5; box-shadow: inset 0 0 35px rgba(245, 158, 11, 0.3), 0 0 35px rgba(245, 158, 11, 0.25); }
+    }
+    @keyframes breathing-ripple-2 {
+      0%, 100% { transform: scale(1.2); opacity: 0.05; }
+      50% { transform: scale(0.9); opacity: 0.4; box-shadow: 0 0 30px rgba(6, 182, 212, 0.2); }
+    }
+
+    /* Thinking state ripples */
+    .waveform-container.thinking .ripple-1 {
+      border-color: var(--accent-rose);
+      animation: rapid-pulse-1 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .waveform-container.thinking .ripple-2 {
+      border-color: var(--accent-copper);
+      animation: rapid-pulse-2 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    .waveform-container.thinking .call-center-btn {
+      border-color: var(--accent-rose);
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.3);
+    }
+    .waveform-container.thinking .call-center-btn svg {
+      fill: var(--accent-rose);
+      animation: spin-thinking 2s linear infinite;
+    }
+
+    @keyframes spin-thinking {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @keyframes rapid-pulse-1 {
+      0% { transform: scale(0.95); opacity: 0.8; box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+      100% { transform: scale(1.4); opacity: 0; box-shadow: 0 0 35px rgba(239, 68, 68, 0.5); }
+    }
+    @keyframes rapid-pulse-2 {
+      0% { transform: scale(1.1); opacity: 0.6; }
+      100% { transform: scale(1.65); opacity: 0; box-shadow: 0 0 45px var(--accent-copper-glow); }
+    }
+
+    /* Speaking state ripples */
+    .waveform-container.speaking .ripple-1 {
+      border-color: var(--accent-cyan);
+      animation: smooth-sine-1 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+    }
+    .waveform-container.speaking .ripple-2 {
+      border-color: #22d3ee;
+      animation: smooth-sine-2 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+      animation-delay: 0.6s;
+    }
+    .waveform-container.speaking .ripple-3 {
+      border-color: #e0f7fa;
+      animation: smooth-sine-3 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+      animation-delay: 1.2s;
+    }
+    .waveform-container.speaking .call-center-btn {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 25px var(--accent-cyan-glow);
+    }
+    .waveform-container.speaking .call-center-btn svg {
+      fill: var(--accent-cyan);
+    }
+
+    @keyframes smooth-sine-1 {
+      0% { transform: scale(0.85); opacity: 0.8; }
+      100% { transform: scale(1.55); opacity: 0; box-shadow: 0 0 30px rgba(6, 182, 212, 0.35); }
+    }
+    @keyframes smooth-sine-2 {
+      0% { transform: scale(0.85); opacity: 0.6; }
+      100% { transform: scale(1.55); opacity: 0; box-shadow: 0 0 35px rgba(34, 211, 238, 0.25); }
+    }
+    @keyframes smooth-sine-3 {
+      0% { transform: scale(0.85); opacity: 0.4; }
+      100% { transform: scale(1.55); opacity: 0; box-shadow: 0 0 40px rgba(224, 247, 250, 0.2); }
+    }
+
+    .call-timer {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 600;
+      color: #94a3b8;
+      letter-spacing: 1px;
+      margin-top: 18px;
+    }
+
+    /* Subtitles Panel */
+    .call-subtitle-panel {
+      max-width: 480px;
+      width: 100%;
+      height: 96px;
+      padding: 16px 20px;
+      border-radius: 18px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--glass-border);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .subtitle-speaker {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .subtitle-text {
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: #f1f5f9;
+      font-style: italic;
+    }
+
+    /* End Call Controller Button */
+    .hang-up-btn {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+      transition: var(--transition-bounce);
+    }
+
+    .hang-up-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 10px 30px rgba(239, 68, 68, 0.6), 0 0 35px var(--accent-rose);
+    }
+
+    .hang-up-btn:active {
+      transform: scale(0.9);
+    }
+
+    .hang-up-btn svg {
+      width: 26px;
+      height: 26px;
+      fill: #ffffff;
+      transform: rotate(135deg);
+    }
+
+    /* --------------------------------------------------
+       ERROR TOAST SYSTEMS
+       -------------------------------------------------- */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      z-index: 1010;
+      width: calc(100% - 40px);
+      max-width: 400px;
+      padding: 14px 18px;
+      border-radius: 14px;
+      background: rgba(239, 68, 68, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      opacity: 0;
+      transition: var(--transition-bounce);
+      pointer-events: none;
+    }
+
+    .toast-container.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .toast-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .toast-icon svg {
+      width: 14px;
+      height: 14px;
+      fill: #ffffff;
+    }
+
+    .toast-message {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: #ffffff;
+      line-height: 1.45;
+    }
+
+    /* --------------------------------------------------
+       SECURE GLASSMORPHIC AUTHENTICATION STYLES
+       -------------------------------------------------- */
+    .auth-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2000;
+      background: rgba(3, 5, 10, 0.94);
+      backdrop-filter: blur(35px);
+      -webkit-backdrop-filter: blur(35px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .auth-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-30px);
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 420px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 35px 30px;
+      box-shadow: 
+        inset 0 1px 0 var(--glass-highlight),
+        0 20px 50px rgba(0, 0, 0, 0.5),
+        0 0 40px rgba(245, 158, 11, 0.05);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      position: relative;
+      overflow: hidden;
+      transition: var(--transition-smooth);
+    }
+
+    .auth-branding {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .auth-logo {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--accent-copper), var(--accent-copper-dark));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 800;
+      color: #020617;
+      box-shadow: 0 0 20px var(--accent-copper-glow);
+    }
+
+    .auth-title {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(to right, #ffffff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .auth-title span {
+      background: linear-gradient(to right, var(--accent-copper), #fbbf24);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .auth-subtitle {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .auth-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: var(--transition-smooth);
+    }
+
+    .auth-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 0.5px;
+    }
+
+    .auth-input {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: #ffffff;
+      outline: none;
+      transition: all 0.25s ease;
+    }
+
+    .auth-input::placeholder {
+      color: #475569;
+    }
+
+    .auth-input:focus {
+      border-color: var(--accent-copper);
+      box-shadow: 0 0 12px var(--accent-copper-glow);
+      background: rgba(0, 0, 0, 0.55);
+    }
+
+    .auth-btn {
+      margin-top: 8px;
+      padding: 13px;
+      border-radius: 12px;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      background: linear-gradient(135deg, var(--accent-copper), var(--accent-copper-dark));
+      color: #020617;
+      font-family: var(--font-display);
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(245, 158, 11, 0.25);
+      transition: var(--transition-smooth);
+    }
+
+    .auth-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4), 0 0 15px var(--accent-copper-glow);
+    }
+
+    .auth-btn:active {
+      transform: translateY(0);
+    }
+
+    .auth-toggle {
+      text-align: center;
+      margin-top: 5px;
+    }
+
+    .auth-toggle a {
+      font-size: 11.5px;
+      color: var(--accent-cyan);
+      text-decoration: none;
+      font-weight: 600;
+      transition: var(--transition-smooth);
+    }
+
+    .auth-toggle a:hover {
+      color: #22d3ee;
+      text-shadow: 0 0 8px var(--accent-cyan-glow);
+    }
+
+    .auth-spinner {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 20px 0;
+    }
+
+    .spinner-ring {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(245, 158, 11, 0.1);
+      border-top-color: var(--accent-copper);
+      border-radius: 50%;
+      animation: spin-auth 0.8s linear infinite;
+    }
+
+    .spinner-text {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-copper);
+      letter-spacing: 0.5px;
+    }
+
+    @keyframes spin-auth {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsive Mobile styling overrides */
+    @media (max-width: 580px) {
+      .welcome-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .welcome-card {
+        padding: 20px 16px;
+        border-radius: 18px;
+      }
+
+      header {
+        padding: 10px 14px;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .branding {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .header-actions {
+        width: 100%;
+        justify-content: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .clear-btn, .status-badge, .font-btn {
+        padding: 5px 10px;
+        font-size: 10px;
+        border-radius: 8px;
+      }
+
+      .font-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+      }
+
+      .chat-app {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        padding: 10px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- DYNAMIC SECURE AUTHENTICATION LAYER -->
+  <div id="authOverlay" class="auth-overlay">
+    <div class="auth-card">
+      <div class="auth-branding">
+        <div class="auth-logo">ଓ</div>
+        <h2 class="auth-title">Utkal<span>.ai</span></h2>
+        <p class="auth-subtitle">Universal Knowledge Portal & Schemes Guide</p>
+      </div>
+
+      <!-- Spinner Loader -->
+      <div class="auth-spinner" id="authSpinner">
+        <div class="spinner-ring"></div>
+        <span class="spinner-text">Verifying Identity / ଯାଞ୍ଚ ଚାଲିଛି...</span>
+      </div>
+
+      <form id="authForm" class="auth-form" onsubmit="handleAuthSubmit(event)">
+        <!-- Full Name (Sign Up only) -->
+        <div class="auth-field" id="fullNameField" style="display: none;">
+          <label class="auth-label">ନାମ (Full Name)</label>
+          <input type="text" id="authName" class="auth-input" placeholder="Enter your full name...">
+        </div>
+
+        <div class="auth-field">
+          <label class="auth-label">ମୋବାଇଲ୍ ନମ୍ବର / ଇମେଲ୍ (Mobile / Email)</label>
+          <input type="text" id="authIdentifier" class="auth-input" placeholder="Enter mobile number or email..." required>
+        </div>
+
+        <div class="auth-field">
+          <label class="auth-label">ପାସୱାର୍ଡ (Password)</label>
+          <input type="password" id="authPassword" class="auth-input" placeholder="Enter password..." required>
+        </div>
+
+        <button type="submit" id="authSubmitBtn" class="auth-btn">
+          ପ୍ରବେଶ କରନ୍ତୁ (Login)
+        </button>
+      </form>
+
+      <div class="auth-toggle">
+        <a href="#" id="authToggleLink" onclick="toggleAuthMode(event)">
+          ନୂଆ ଆକାଉଣ୍ଟ ତିଆରି କରନ୍ତୁ (Create New Account / Sign Up)
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Decorative background tech glows -->
+  <div class="orb-copper"></div>
+  <div class="orb-cyan"></div>
+
+  <!-- MAIN CHAT APP CONSOLE -->
+  <div class="chat-app">
+    
+    <!-- HEADER -->
+    <header>
+      <div class="branding">
+        <div class="logo-icon">ଓ</div>
+        <h1 class="logo-text">Utkal<span>.ai</span></h1>
+      </div>
+      
+      <div class="header-actions">
+        <!-- Font Size Adjustment -->
+        <div class="font-group">
+          <button onclick="changeFontSize('decrease')" class="font-btn" title="Decrease Font Size / ଅକ୍ଷର ଛୋଟ କରନ୍ତୁ">A-</button>
+          <button onclick="changeFontSize('increase')" class="font-btn" title="Increase Font Size / ଅକ୍ଷର ବଡ଼ କରନ୍ତୁ">A+</button>
+        </div>
+
+        <button id="clearChatBtn" class="clear-btn" title="Clear Conversation Logs">
+          <svg viewBox="0 0 24 24">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+          Clear
+        </button>
+        
+        <!-- Secure Logout button inside actions -->
+        <button id="logoutBtn" class="clear-btn" style="background: rgba(239, 68, 68, 0.06); border-color: rgba(239, 68, 68, 0.2); color: #ef4444;" title="Log Out / ପ୍ରସ୍ଥାନ" onclick="handleLogout()">
+          <svg viewBox="0 0 24 24" style="width: 12px; height: 12px; fill: currentColor;">
+            <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+          </svg>
+          ପ୍ରସ୍ଥାନ
+        </button>
+
+        <div id="connectionStatus" class="status-badge offline">
+          <span class="status-dot"></span>
+          <span id="connectionText">Checking Connection</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- CONVERSATION VIEWPPORT -->
+    <main id="chatViewport" class="conversation-viewport">
+      
+      <!-- Premium Welcome Dashboard Splash Card -->
+      <div id="welcomeSplash" class="welcome-card">
+        <div class="welcome-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
+          </svg>
+        </div>
+        <h2 class="welcome-title">Utkal.ai Govt & Knowledge Guide / ସରକାରୀ ଯୋଜନା ଓ ଜ୍ଞាន କେନ୍ଦ୍ର</h2>
+        <p class="welcome-desc">
+          ନମସ୍କାର! ମୁଁ Utkal.ai ସରକାରୀ ଯୋଜନା ଓ ସାଧାରଣ ଜ୍ଞាន ସହାୟକ। ଆପଣ ମୋତେ ଓଡ଼ିଆ ଅକ୍ଷର, ଇଂରାଜୀ, କିମ୍ବା ଇଂରାଜୀ ଅକ୍ଷରରେ ଓଡ଼ିଆ ଲେଖି ଯେକୌଣସି ପ୍ରଶ୍ନ (ସରକାରୀ ଯୋଜନା, ଚାଷ ବାସ, ଶିକ୍ଷା, ସ୍ୱାସ୍ଥ୍ୟ, ବ୍ୟକ୍ତିଗତ ଖର୍ଚ୍ଚ କିମ୍ବା ଜ୍ଞାନ ବିଷୟରେ) ପଚାରିପାରିବେ। ମୁଁ ଆପଣଙ୍କୁ ସଠିକ ଉତ୍ତର ପ୍ରଦାନ କରିବି।
+        </p>
+        
+        <div class="preset-section-title">
+          📋 ସରକାରୀ ଯୋଜନା ଓ ସେବା (Govt Schemes & Services)
+        </div>
+        <div class="welcome-grid">
+          <div class="welcome-preset-card" onclick="sendPreset('ସୁଭଦ୍ରା ଯୋଜନା ପାଇଁ କଣ ସବୁ ଡକ୍ୟୁମେଣ୍ଟ ଦରକାର ଏବଂ କେମିତି ଆବେଦନ କରିବି?')">
+            <span class="preset-card-icon">👩💼</span>
+            <span class="preset-card-title">ସୁଭଦ୍ରା ଯୋଜନା ସହାୟତା</span>
+            <span class="preset-card-desc">Subhadra Yojana Documents & Online Apply Guide</span>
+          </div>
+          <div class="welcome-preset-card" onclick="sendPreset('ନୂଆ ରେସନ କାର୍ଡ ପାଇଁ କେଉଁ କେଉଁ କାଗଜପତ୍ର ଆବଶ୍ୟକ ଏବଂ କେଉଁଠି ଆବେଦନ କରିବାକୁ ହେବ?')">
+            <span class="preset-card-icon">🌾</span>
+            <span class="preset-card-title">ନୂଆ ରେସନ କାର୍ଡ ନିୟମ</span>
+            <span class="preset-card-desc">Required documents for Odisha New Ration Card</span>
+          </div>
+          <div class="welcome-preset-card" onclick="sendPreset('ଜାତି ପ୍ରମାଣପତ୍ର (Caste Certificate) ଏବଂ ଆୟ ପ୍ରମାଣପତ୍ର (Income Certificate) ପାଇଁ ମୋ ସେବା କେନ୍ଦ୍ରରେ କଣ ଦରକାର?')">
+            <span class="preset-card-icon">📄</span>
+            <span class="preset-card-title">ପ୍ରମାଣପତ୍ର ଓ ଦଲିଲ</span>
+            <span class="preset-card-desc">Caste, Income & Residence certificate checklist</span>
+          </div>
+        </div>
+
+        <div class="preset-section-title copper">
+          ✏️ ଓଡ଼ିଆ ଭାଷା ଶିକ୍ଷା ଓ ବ୍ୟାକରଣ (Odia Language & Grammar)
+        </div>
+        <div class="welcome-grid">
+          <div class="welcome-preset-card copper" onclick="sendPreset('ଛୋଟ ପିଲାଙ୍କୁ ଓଡ଼ିଆ ଅକ୍ଷର (ଅ, ଆ), ସ୍ୱରବର୍ଣ୍ଣ ଏବଂ ବ୍ୟଞ୍ଜନବର୍ଣ୍ଣ କେମିତି ସହଜରେ ଶିଖାଇବି?')">
+            <span class="preset-card-icon">👶</span>
+            <span class="preset-card-title">ଓଡ଼ିଆ ବର୍ଣ୍ଣମାଳา ଓ ଶିକ୍ଷା</span>
+            <span class="preset-card-desc">Teaching Odia alphabets, vowels & consonants</span>
+          </div>
+          <div class="welcome-preset-card copper" onclick="sendPreset('ଓଡ଼ିଆ ବ୍ୟାକରଣର ସନ୍ଧି (Sandhi), ସମାସ (Samasa) ଏବଂ କାରକ (Karaka) ବିଷୟରେ ସହଜ ଉଦାହରଣ ସହ ବୁଝାଇ ଦିଅ।')">
+            <span class="preset-card-icon">📖</span>
+            <span class="preset-card-title">ଓଡ଼ିଆ ବ୍ୟାକରଣ ନିୟମ</span>
+            <span class="preset-card-desc">Learn Odia grammar rules, Sandhi & Samasa basics</span>
+          </div>
+          <div class="welcome-preset-card copper" onclick="sendPreset('ଓଡ଼ିଆ ଭାଷାରେ ବହୁଳ ଭାବରେ ବ୍ୟବହୃତ ହେଉଥିବା ବିପରୀତ ଶବ୍ଦ (Opposite Words) ଏବଂ ପ୍ରତିଶବ୍ଦ (Synonyms) ର କିଛି ସରଳ ତାଲିକା ଦିଅ।')">
+            <span class="preset-card-icon">🗣️</span>
+            <span class="preset-card-title">ଶବ୍ଦ କୋଷ ଓ ବିପରୀତ ଶବ୍ଦ</span>
+            <span class="preset-card-desc">Essential Odia vocabulary list, synonyms & antonyms</span>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- TEXT CHAT INPUT CENTRE -->
+    <footer class="input-wrapper">
+      <!-- Voicemic trigger button -->
+      <button id="callModeBtn" class="voice-mic-btn" title="Start Live Voice Call / କଣ୍ଠସ୍ୱର କାରବାର">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+      </button>
+      <textarea id="chatInput" class="chat-textarea" placeholder="Type in Odia, English, or transliterated..." rows="1"></textarea>
+      <button id="sendBtn" class="send-btn" title="Send Message">
+        <svg viewBox="0 0 24 24">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </footer>
+
+  </div>
+
+  <!-- CINEMATIC IMMERSIVE VOICE CALL OVERLAY -->
+  <div id="voiceCallOverlay" class="voice-call-overlay">
+    
+    <!-- Branding Header -->
+    <div class="call-header">
+      <h2 class="call-brand-title">Utkal.ai Voice Live</h2>
+      <div id="callStatusLabel" class="call-status-label">Listening...</div>
+    </div>
+
+    <!-- BREATHING WAVEFORM RING WITH ANIMATED SOUND BARS -->
+    <div id="callWaveRing" class="waveform-container listening">
+      <!-- Rippling Pulse Circles -->
+      <div class="ripple-circle ripple-1"></div>
+      <div class="ripple-circle ripple-2"></div>
+      <div class="ripple-circle ripple-3"></div>
+      
+      <!-- Staggered Equalizer Wave simulator -->
+      <div class="soundwave-simulator">
+        <span class="bar bar-1"></span>
+        <span class="bar bar-2"></span>
+        <span class="bar bar-3"></span>
+        <span class="bar bar-4"></span>
+        <span class="bar bar-5"></span>
+        <span class="bar bar-6"></span>
+        <span class="bar bar-7"></span>
+        <span class="bar bar-8"></span>
+        <span class="bar bar-9"></span>
+      </div>
+      
+      <!-- Haptic Central Mic trigger -->
+      <button id="callCenterTrigger" class="call-center-btn" title="Complete Speaking / Tweak Playback">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Live Recording Call Timer -->
+    <div id="callTimer" class="call-timer">00:00</div>
+
+    <!-- Glass Subtitle panel for real time captions -->
+    <div class="call-subtitle-panel">
+      <div id="subtitleSpeaker" class="subtitle-speaker">You / ଆପଣ</div>
+      <div id="subtitleText" class="subtitle-text">"କହିବା ଆରମ୍ଭ କରନ୍ତୁ..." (Start speaking your expense or question...)</div>
+    </div>
+
+    <!-- HANG UP BUTTON CONTROLLER -->
+    <button id="hangUpBtn" class="hang-up-btn" title="End Call">
+      <svg viewBox="0 0 24 24">
+        <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+      </svg>
+    </button>
+
+  </div>
+
+  <!-- TOAST ERROR NOTIFIER -->
+  <div class="toast-container" id="errorToast">
+    <div class="toast-icon">
+      <svg viewBox="0 0 24 24">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+      </svg>
+    </div>
+    <div class="toast-message" id="toastMessage">An error occurred. Check internet or API Key.</div>
+  </div>
+
+  <!-- --------------------------------------------------
+       CORE CLIENT-SIDE ENGINE JAVASCRIPT
+       -------------------------------------------------- -->
+  <script>
+    // DOM Selectors
+    const serverUrl = window.location.origin;
+    const chatViewport = document.getElementById('chatViewport');
+    const welcomeSplash = document.getElementById('welcomeSplash');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const clearBtn = document.getElementById('clearChatBtn');
+    const connBadge = document.getElementById('connectionStatus');
+    const connText = document.getElementById('connectionText');
+    const errorToast = document.getElementById('errorToast');
+    const toastMsg = document.getElementById('toastMessage');
+
+    // Cinematic overlay selectors
+    const callModeBtn = document.getElementById('callModeBtn');
+    const voiceCallOverlay = document.getElementById('voiceCallOverlay');
+    const callWaveRing = document.getElementById('callWaveRing');
+    const callStatusLabel = document.getElementById('callStatusLabel');
+    const callTimer = document.getElementById('callTimer');
+    const subtitleSpeaker = document.getElementById('subtitleSpeaker');
+    const subtitleText = document.getElementById('subtitleText');
+    const callCenterTrigger = document.getElementById('callCenterTrigger');
+    const hangUpBtn = document.getElementById('hangUpBtn');
+
+    // Secure Authentication DOM Elements
+    const authOverlay = document.getElementById('authOverlay');
+    const authForm = document.getElementById('authForm');
+    const authSpinner = document.getElementById('authSpinner');
+    const fullNameField = document.getElementById('fullNameField');
+    const authName = document.getElementById('authName');
+    const authIdentifier = document.getElementById('authIdentifier');
+    const authPassword = document.getElementById('authPassword');
+    const authSubmitBtn = document.getElementById('authSubmitBtn');
+    const authToggleLink = document.getElementById('authToggleLink');
+
+    // Secure Authentication States
+    let authMode = 'login'; // 'login' or 'signup'
+
+    function checkAuthState() {
+      const loggedIn = localStorage.getItem('utkal_ai_user_logged_in');
+      if (loggedIn === 'true') {
+        authOverlay.classList.add('hidden');
+        console.log('[Auth] Secure session verified. Dashboard unlocked.');
+      } else {
+        authOverlay.classList.remove('hidden');
+        console.log('[Auth] Gateway locked. Please authenticate.');
+      }
+    }
+
+    function toggleAuthMode(e) {
+      e.preventDefault();
+      if (authMode === 'login') {
+        authMode = 'signup';
+        fullNameField.style.display = 'flex';
+        authName.required = true;
+        authSubmitBtn.textContent = 'ନୂଆ ଆକାଉଣ୍ଟ ଖୋଲନ୍ତୁ (Create Account)';
+        authToggleLink.textContent = 'ପୂର୍ବରୁ ଆକାଉଣ୍ଟ ଅଛି? ପ୍ରବେଶ କରନ୍ତୁ (Already have an account? Login)';
+      } else {
+        authMode = 'login';
+        fullNameField.style.display = 'none';
+        authName.required = false;
+        authSubmitBtn.textContent = 'ପ୍ରବେଶ କରନ୍ତୁ (Login)';
+        authToggleLink.textContent = 'ନୂଆ ଆକାଉଣ୍ଟ ତିଆରି କରନ୍ତୁ (Create New Account / Sign Up)';
+      }
+    }
+
+    function handleAuthSubmit(e) {
+      e.preventDefault();
+      
+      const identifier = authIdentifier.value.trim();
+      const password = authPassword.value.trim();
+      const name = authName.value.trim();
+
+      if (!identifier || !password || (authMode === 'signup' && !name)) {
+        showToast('ଦୟାକରି ସମସ୍ତ ତଥ୍ୟ ପୂରଣ କରନ୍ତୁ।');
+        return;
+      }
+
+      // Hide input form and trigger elite glassmorphic spinner loader
+      authForm.style.display = 'none';
+      authSpinner.style.display = 'flex';
+
+      console.log(`[Auth] Executing secure mock ${authMode} flow...`);
+
+      setTimeout(() => {
+        // Mock successful validation
+        localStorage.setItem('utkal_ai_user_logged_in', 'true');
+        localStorage.setItem('utkal_ai_user_identifier', identifier);
+        localStorage.setItem('utkal_ai_user_name', authMode === 'signup' ? name : 'User / ବ୍ୟବହାରକାରୀ');
+
+        // Beautiful card fade-out / slide upward transition
+        authOverlay.classList.add('hidden');
+        
+        showToast(authMode === 'signup' 
+          ? 'ଆକାଉଣ୍ଟ ସଫଳତାର ସହ ତିଆରି ହେଲା! ସ୍ୱାଗତ!' 
+          : 'ପ୍ରବେଶ ସଫଳ ହେଲା! ସ୍ୱାଗତ!');
+        
+        // Update user state
+        checkAuthState();
+
+        // Reset form variables
+        authForm.reset();
+        authForm.style.display = 'flex';
+        authSpinner.style.display = 'none';
+
+        console.log('[Auth] Gatekeeper verification complete. Main workspace active.');
+      }, 1500);
+    }
+
+    function handleLogout() {
+      console.log('[Auth] Logging out user and securing the workspace.');
+      localStorage.removeItem('utkal_ai_user_logged_in');
+      localStorage.removeItem('utkal_ai_user_identifier');
+      localStorage.removeItem('utkal_ai_user_name');
+      
+      // Instantly pop the authentication screen overlay
+      authOverlay.classList.remove('hidden');
+      showToast('ସଫଳତାର ସହ ପ୍ରସ୍ଥាន କରାଗଲା।');
+    }
+
+    // Instantly check user auth state on load
+    checkAuthState();
+
+    // Font Size Adjustment Logic
+    let currentFontSize = 13.5;
+
+    function changeFontSize(action) {
+      if (action === 'increase') {
+        if (currentFontSize < 22) {
+          currentFontSize += 1.5;
+        }
+      } else if (action === 'decrease') {
+        if (currentFontSize > 10.5) {
+          currentFontSize -= 1.5;
+        }
+      }
+      document.documentElement.style.setProperty('--chat-body-size', `${currentFontSize}px`);
+      localStorage.setItem('utkal_ai_font_size', currentFontSize);
+      console.log(`[UI] Font size adjusted to: ${currentFontSize}px`);
+    }
+
+    function loadFontSize() {
+      const savedSize = localStorage.getItem('utkal_ai_font_size');
+      if (savedSize) {
+        currentFontSize = parseFloat(savedSize);
+        document.documentElement.style.setProperty('--chat-body-size', `${currentFontSize}px`);
+      }
+    }
+    loadFontSize();
+
+    // State Variables
+    let conversationHistory = [];
+    let isAITyping = false;
+    let currentAgent = 'frontend';
+    
+    // Voice Call Recording States
+    let isCallActive = false;
+    let callMediaRecorder = null;
+    let callAudioChunks = [];
+    let callTimerInterval = null;
+    let callSeconds = 0;
+    let callCurrentAudio = new Audio();
+    let callEngineState = 'idle'; // 'idle', 'listening', 'thinking', 'speaking'
+
+    // Dummy helper function maintained to ensure compatibility with backend process voice pipelines
+    function updateLedgerSidebar() {
+      // Sidebar removed
+    }
+
+    // --------------------------------------------------
+    // CONNECTION STATUS MONITOR
+    // --------------------------------------------------
+    async function checkServerHealth() {
+      try {
+        const res = await fetch(`${serverUrl}/`);
+        if (res.status === 200) {
+          connBadge.className = 'status-badge active';
+          connText.textContent = 'Active (Port 5000)';
+        } else {
+          throw new Error('Unhealthy status');
+        }
+      } catch (err) {
+        connBadge.className = 'status-badge offline';
+        connText.textContent = 'Offline';
+      }
+    }
+
+    checkServerHealth();
+    setInterval(checkServerHealth, 12000); // Check every 12s
+
+    // --------------------------------------------------
+    // ERROR TOAST SYSTEM
+    // --------------------------------------------------
+    function showToast(message) {
+      toastMsg.textContent = message;
+      errorToast.classList.add('show');
+      setTimeout(() => {
+        errorToast.classList.remove('show');
+      }, 5000);
+    }
+
+    // --------------------------------------------------
+    // TEXT INPUT AUTO-STYLING & HANDLERS
+    // --------------------------------------------------
+    function scrollToBottom() {
+      chatViewport.scrollTop = chatViewport.scrollHeight;
+    }
+
+    chatInput.addEventListener('input', () => {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = (chatInput.scrollHeight - 6) + 'px';
+      if (chatInput.value === '') {
+        chatInput.style.height = '24px';
+      }
+    });
+
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        dispatchUserMessage();
+      }
+    });
+
+    sendBtn.addEventListener('click', dispatchUserMessage);
+
+    clearBtn.addEventListener('click', () => {
+      const messageRows = chatViewport.querySelectorAll('.message-row');
+      messageRows.forEach(row => row.remove());
+      welcomeSplash.style.display = 'flex';
+      conversationHistory = [];
+      localStorage.removeItem('utkal_ai_chat_history');
+    });
+
+    function sendPreset(text) {
+      chatInput.value = text;
+      chatInput.style.height = 'auto';
+      chatInput.style.height = (chatInput.scrollHeight - 6) + 'px';
+      dispatchUserMessage();
+    }
+
+    function loadHistory() {
+      const cached = localStorage.getItem('utkal_ai_chat_history');
+      if (cached) {
+        conversationHistory = JSON.parse(cached);
+        if (conversationHistory.length > 0) {
+          welcomeSplash.style.display = 'none';
+          conversationHistory.forEach((msg) => {
+            if (msg.type === 'ledger') {
+              appendLedgerMessage(msg.data, false);
+            } else {
+              appendMessage(msg.role, msg.text, false);
+            }
+          });
+        }
+      }
+    }
+
+    loadHistory();
+
+    // --------------------------------------------------
+    // DYNAMIC MARKDOWN PARSING ENGINE
+    // --------------------------------------------------
+    function parseMarkdownToHtml(text) {
+      if (!text) return '';
+      let html = text;
+
+      // Escape standard HTML tags for safety
+      html = html
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      // 1. Extract closed code blocks and replace with placeholders
+      const codeBlocks = [];
+      html = html.replace(/```(\w*)\r?\n?([\s\S]*?)\r?\n?```/g, (match, lang, code) => {
+        const placeholder = `__CODE_BLOCK_PLACEHOLDER_${codeBlocks.length}__`;
+        codeBlocks.push(code);
+        return placeholder;
+      });
+
+      // 2. Extract unclosed code block (truncation typewriter safety)
+      let unclosedPlaceholder = null;
+      let unclosedCode = null;
+      if (html.includes('```')) {
+        const index = html.indexOf('```');
+        const markerAndCode = html.substring(index);
+        const match = markerAndCode.match(/^```(\w*)\r?\n?([\s\S]*)$/);
+        if (match) {
+          unclosedCode = match[2];
+          unclosedPlaceholder = `__CODE_BLOCK_PLACEHOLDER_${codeBlocks.length}__`;
+          html = html.substring(0, index) + unclosedPlaceholder;
+        }
+      }
+
+      // Convert headings
+      html = html.replace(/^###\s+(.*)$/gm, '<h4 style="font-family:var(--font-display);font-weight:700;color:var(--accent-copper);margin:12px 0 6px 0;font-size:1em;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:3px;">$1</h4>');
+      html = html.replace(/^##\s+(.*)$/gm, '<h3 style="font-family:var(--font-display);font-weight:800;color:var(--accent-cyan);margin:16px 0 8px 0;font-size:1.15em;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:4px;">$1</h3>');
+      html = html.replace(/^#\s+(.*)$/gm, '<h2 style="font-family:var(--font-display);font-weight:800;color:#ffffff;margin:18px 0 10px 0;font-size:1.28em;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:5px;">$1</h2>');
+
+      // Convert bold: **text**
+      html = html.replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--accent-copper);font-weight:700;">$1</strong>');
+
+      // Convert italic: *text*
+      html = html.replace(/\*(.*?)\*/g, '<em style="color:#d1d5db;">$1</em>');
+
+      // Convert horizontal rules: ---
+      html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:12px 0;">');
+
+      // Convert bullet points
+      let lines = html.split('\n');
+      let inList = false;
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+        if (line.startsWith('* ') || line.startsWith('- ')) {
+          let content = line.substring(2).trim();
+          if (!inList) {
+            lines[i] = '<ul style="margin: 6px 0 12px 18px; list-style-type: disc;"><li style="margin-bottom:4px;">' + content + '</li>';
+            inList = true;
+          } else {
+            lines[i] = '<li style="margin-bottom:4px;">' + content + '</li>';
+          }
+        } else {
+          if (inList) {
+            lines[i] = '</ul>' + lines[i];
+            inList = false;
+          }
+        }
+      }
+      if (inList) {
+        lines[lines.length - 1] += '</ul>';
+      }
+      html = lines.join('\n');
+
+      // Convert double breaks and standard newlines
+      html = html.replace(/\n/g, '<br>');
+      
+      // Clean block tags double breaks
+      html = html.replace(/<\/ul><br>/g, '</ul>');
+      html = html.replace(/<br><ul/g, '<ul');
+      html = html.replace(/<\/h4><br>/g, '</h4>');
+      html = html.replace(/<\/h3><br>/g, '</h3>');
+      html = html.replace(/<\/h2><br>/g, '</h2>');
+      html = html.replace(/<hr style=".*"><br>/g, (match) => match.replace('<br>', ''));
+
+      // Restore scrollable dark code blocks
+      for (let i = 0; i < codeBlocks.length; i++) {
+        const codeContent = codeBlocks[i];
+        const placeholder = `__CODE_BLOCK_PLACEHOLDER_${i}__`;
+        const stylizedBlock = `<pre style="background: rgba(9, 13, 22, 0.95); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 14px; margin: 12px 0; overflow-x: auto; max-width: 100%; font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.5; color: #cbd5e1; box-sizing: border-box;"><code style="font-family: inherit; color: inherit; white-space: pre; display: block; overflow-x: auto;">${codeContent}</code></pre>`;
+        html = html.replace(placeholder, stylizedBlock);
+      }
+      if (unclosedPlaceholder && unclosedCode !== null) {
+        const stylizedBlock = `<pre style="background: rgba(9, 13, 22, 0.95); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 14px; margin: 12px 0; overflow-x: auto; max-width: 100%; font-family: Consolas, Monaco, monospace; font-size: 12px; line-height: 1.5; color: #cbd5e1; box-sizing: border-box;"><code style="font-family: inherit; color: inherit; white-space: pre; display: block; overflow-x: auto;">${unclosedCode}</code></pre>`;
+        html = html.replace(unclosedPlaceholder, stylizedBlock);
+      }
+
+      return html;
+    }
+
+    // --------------------------------------------------
+    // TEXT MESSAGING & LEDGER RENDERING
+    // --------------------------------------------------
+    function appendMessage(role, text, shouldAnimate = true) {
+      welcomeSplash.style.display = 'none';
+      
+      const messageRow = document.createElement('div');
+      messageRow.className = `message-row ${role}`;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'message-wrapper';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar';
+      if (role === 'user') {
+        avatar.innerHTML = '👤';
+      } else {
+        avatar.innerHTML = 'ଓ';
+      }
+
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+
+      wrapper.appendChild(avatar);
+      wrapper.appendChild(bubble);
+      messageRow.appendChild(wrapper);
+      chatViewport.appendChild(messageRow);
+      scrollToBottom();
+
+      if (role === 'bot' && shouldAnimate) {
+        typewriterAnimation(bubble, text);
+      } else {
+        if (role === 'bot') {
+          bubble.innerHTML = parseMarkdownToHtml(text);
+        } else {
+          bubble.textContent = text;
+        }
+        scrollToBottom();
+      }
+
+      return messageRow;
+    }
+
+    function typewriterAnimation(element, text) {
+      let index = 0;
+      element.textContent = '';
+      function typeNext() {
+        if (index < text.length) {
+          element.textContent += text.charAt(index);
+          index++;
+          scrollToBottom();
+          const delay = text.length > 500 ? 5 : 12;
+          setTimeout(typeNext, delay);
+        } else {
+          element.innerHTML = parseMarkdownToHtml(text);
+          scrollToBottom();
+        }
+      }
+      typeNext();
+    }
+
+    // Dynamic High-Fidelity Ledger Card (Injected inside chat bubbles)
+    function appendLedgerMessage(data, isFromLive = true) {
+      welcomeSplash.style.display = 'none';
+
+      const messageRow = document.createElement('div');
+      messageRow.className = 'message-row bot';
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'message-wrapper';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar';
+      avatar.innerHTML = 'ଓ';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble';
+      bubble.style.padding = '0'; // Allow card to fill the bubble space
+
+      // Build Dynamic card structures
+      const card = document.createElement('div');
+      card.className = 'chat-ledger-card';
+      
+      const { action, party, amount, item, payment_type } = data.transaction;
+      const actionClass = action.toLowerCase();
+      const formattedAction = action.replace('_', ' ');
+
+      card.innerHTML = `
+        <div class="chat-ledger-header">
+          <svg viewBox="0 0 24 24">
+            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+          </svg>
+          Diary entry recorded successfully / ଡାଏରୀରେ ଲିପିବଦ୍ଧ ହେଲା
+        </div>
+        <div class="chat-ledger-grid">
+          <div class="chat-ledger-row">
+            <span class="chat-ledger-label">Party / Person</span>
+            <span class="chat-ledger-val">${party && party !== 'N/A' ? party : 'General / ସାଧାରଣ'}</span>
+          </div>
+          <div class="chat-ledger-row">
+            <span class="chat-ledger-label">Item / Purpose</span>
+            <span class="chat-ledger-val">${item && item !== 'N/A' ? item : 'N/A'}</span>
+          </div>
+          <div class="chat-ledger-row">
+            <span class="chat-ledger-label">Action Ledger</span>
+            <span class="chat-ledger-badge ${actionClass}">${formattedAction}</span>
+          </div>
+          <div class="chat-ledger-row">
+            <span class="chat-ledger-label">Payment Method</span>
+            <span class="chat-ledger-val" style="color: ${payment_type === 'CREDIT' ? '#ef4444' : '#10b981'}">${payment_type}</span>
+          </div>
+          <div class="chat-ledger-amt-row">
+            <span class="chat-ledger-label" style="font-weight:700;color:#e5e7eb;">Total Amount</span>
+            <span class="chat-ledger-amt-val">₹${Number(amount).toLocaleString('en-IN')}</span>
+          </div>
+        </div>
+      `;
+
+      bubble.appendChild(card);
+      wrapper.appendChild(avatar);
+      wrapper.appendChild(bubble);
+      messageRow.appendChild(wrapper);
+      chatViewport.appendChild(messageRow);
+      scrollToBottom();
+
+      if (isFromLive) {
+        // Cache to localStorage
+        conversationHistory.push({ type: 'ledger', data: data });
+        localStorage.setItem('utkal_ai_chat_history', JSON.stringify(conversationHistory));
+      }
+    }
+
+    // Typing Indicators
+    function showTypingIndicator() {
+      const messageRow = document.createElement('div');
+      messageRow.className = 'message-row bot typing-loader-row';
+      messageRow.innerHTML = `
+        <div class="message-wrapper">
+          <div class="avatar">ଓ</div>
+          <div class="message-bubble">
+            <div class="typing-indicator">
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+              <span class="typing-dot"></span>
+            </div>
+          </div>
+        </div>
+      `;
+      chatViewport.appendChild(messageRow);
+      scrollToBottom();
+      return messageRow;
+    }
+
+    function removeTypingIndicator() {
+      const loader = chatViewport.querySelector('.typing-loader-row');
+      if (loader) loader.remove();
+    }
+
+    // --------------------------------------------------
+    // DISPATCH TEXT MESSAGE PIPELINE
+    // --------------------------------------------------
+    async function dispatchUserMessage() {
+      const text = chatInput.value.trim();
+      if (text === '' || isAITyping) return;
+
+      chatInput.value = '';
+      chatInput.style.height = '24px';
+
+      appendMessage('user', text);
+      conversationHistory.push({ role: 'user', text: text });
+      localStorage.setItem('utkal_ai_chat_history', JSON.stringify(conversationHistory));
+
+      isAITyping = true;
+      showTypingIndicator();
+
+      try {
+        const response = await fetch(`${serverUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text, agentType: currentAgent })
+        });
+
+        const data = await response.json();
+        removeTypingIndicator();
+
+        if (!response.ok) {
+          let errMsg = data.message || 'Server error occurred.';
+          if (data.details && (data.details.includes('Quota exceeded') || data.details.includes('429') || data.details.includes('RESOURCE_EXHAUSTED') || data.details.includes('quota'))) {
+            errMsg = 'ସର୍ଭର ବ୍ୟସ୍ତ ଅଛି (AI Quota Exceeded). ଦୟାକରି ୩୦ ସେକେଣ୍ଡ ପରେ ଚେଷ୍ଟା କରନ୍ତୁ।';
+          }
+          throw new Error(errMsg);
+        }
+
+        if (data.success) {
+          appendMessage('bot', data.response);
+          conversationHistory.push({ role: 'bot', text: data.response });
+          localStorage.setItem('utkal_ai_chat_history', JSON.stringify(conversationHistory));
+        } else {
+          throw new Error(data.message || 'Error formulating response.');
+        }
+
+      } catch (err) {
+        removeTypingIndicator();
+        showToast(err.message || 'Server connection lost.');
+        appendMessage('bot', 'କ୍ଷମା କରିବେ, ମୁଁ ବର୍ତ୍ତମାନ ଆପଣଙ୍କ ପ୍ରଶ୍ନର ଉତ୍ତର ଦେବାରେ ଅସମର୍ଥ। ଦୟାକରି କିଛି ସମୟ ପରେ ଚେଷ୍ଟା କରନ୍ତୁ।');
+      } finally {
+        isAITyping = false;
+        scrollToBottom();
+      }
+    }
+
+    // --------------------------------------------------
+    // IMMERSIVE VOICE CALL MODE ENGINE
+    // --------------------------------------------------
+    function startCallTimer() {
+      callSeconds = 0;
+      callTimer.textContent = '00:00';
+      callTimerInterval = setInterval(() => {
+        callSeconds++;
+        const m = Math.floor(callSeconds / 60);
+        const s = callSeconds % 60;
+        callTimer.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      }, 1000);
+    }
+
+    function stopCallTimer() {
+      if (callTimerInterval) {
+        clearInterval(callTimerInterval);
+        callTimerInterval = null;
+      }
+    }
+
+    function setCallState(state) {
+      callEngineState = state;
+      callWaveRing.className = 'waveform-container'; // Reset states
+      
+      if (state === 'listening') {
+        callWaveRing.classList.add('listening');
+        callStatusLabel.textContent = 'Listening / କଣ୍ଠସ୍ୱର ଗ୍ରହଣ';
+        subtitleSpeaker.textContent = 'You / ଆପଣ';
+        subtitleText.textContent = '"କହିବା ଆରମ୍ଭ କରନ୍ତୁ..." (Start speaking your expense or question...)';
+      } else if (state === 'thinking') {
+        callWaveRing.classList.add('thinking');
+        callStatusLabel.textContent = 'Thinking / ବିଶ୍ଳେଷଣ';
+        subtitleSpeaker.textContent = 'Utkal.ai Brain / ଏଆଇ ମସ୍ତିଷ୍କ';
+        subtitleText.textContent = 'Processing your inquiry & generating response...';
+      } else if (state === 'speaking') {
+        callWaveRing.classList.add('speaking');
+        callStatusLabel.textContent = 'Speaking / ସୂଚନା ପ୍ରଦାନ';
+        subtitleSpeaker.textContent = 'Utkal.ai Voice / ଏଆଇ କଣ୍ଠସ୍ୱର';
+      }
+    }
+
+    // Toggle Overlay states
+    callModeBtn.addEventListener('click', enterCallMode);
+    hangUpBtn.addEventListener('click', exitCallMode);
+
+    async function enterCallMode() {
+      if (isCallActive) return;
+
+      console.log('[Voice Mode] Launching cinematic Phone Call interface.');
+      voiceCallOverlay.classList.add('active');
+      isCallActive = true;
+      
+      // Stop legacy playback
+      callCurrentAudio.pause();
+      callCurrentAudio.src = "";
+
+      // Trigger recording immediately
+      await initiateVoiceRecording();
+    }
+
+    function exitCallMode() {
+      if (!isCallActive) return;
+
+      console.log('[Voice Mode] Terminating audio tracks and dropping back to dashboard.');
+      
+      // Stop media capturing
+      if (callMediaRecorder && callMediaRecorder.state !== 'inactive') {
+        callMediaRecorder.stream.getTracks().forEach(track => track.stop());
+        callMediaRecorder.stop();
+      }
+
+      // Stop audio playback
+      callCurrentAudio.pause();
+      callCurrentAudio.src = "";
+
+      stopCallTimer();
+      voiceCallOverlay.classList.remove('active');
+      isCallActive = false;
+      setCallState('idle');
+    }
+
+    // Capture microphone
+    async function initiateVoiceRecording() {
+      callAudioChunks = [];
+      setCallState('listening');
+      startCallTimer();
+
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Voice recording not supported on this browser context.");
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        callMediaRecorder = new MediaRecorder(stream);
+        
+        callMediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            callAudioChunks.push(e.data);
+          }
+        };
+
+        callMediaRecorder.onstop = async () => {
+          // Release streams
+          stream.getTracks().forEach(track => track.stop());
+          
+          if (!isCallActive) return; // Exit call triggered, abort processing
+
+          const audioBlob = new Blob(callAudioChunks, { type: 'audio/wav' });
+          if (audioBlob.size < 500) {
+            showToast('Voice message too short. Tapping button to retry.');
+            setCallState('listening');
+            return;
+          }
+
+          // Trigger pipeline execution
+          await dispatchVoiceCallPipeline(audioBlob);
+        };
+
+        // Start capture
+        callMediaRecorder.start();
+
+      } catch (err) {
+        console.error('Microphone allocation error:', err);
+        showToast(err.message || 'Unable to allocate microphone permissions.');
+        exitCallMode();
+      }
+    }
+
+    // Concentric ring haptic center button trigger
+    callCenterTrigger.addEventListener('click', () => {
+      if (callEngineState === 'listening') {
+        // Complete speaking, trigger pipeline
+        if (callMediaRecorder && callMediaRecorder.state === 'recording') {
+          callMediaRecorder.stop();
+          stopCallTimer();
+          setCallState('thinking');
+        }
+      } else if (callEngineState === 'speaking') {
+        // Toggle play/pause
+        if (callCurrentAudio.paused) {
+          callCurrentAudio.play();
+        } else {
+          callCurrentAudio.pause();
+        }
+      }
+    });
+
+    // Send audio blob to /api/process-voice
+    async function dispatchVoiceCallPipeline(blob) {
+      try {
+        const formData = new FormData();
+        formData.append('file', blob, 'call-recording.wav');
+        formData.append('agentType', currentAgent);
+
+        const response = await fetch(`${serverUrl}/api/process-voice`, {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) throw new Error(data.message || 'API voice pipeline failed.');
+
+        if (data.success) {
+          console.log('[Voice Mode] Pipeline success! Transcription:', data.transcription);
+          
+          // Display user transcription instantly
+          subtitleText.textContent = `"${data.transcription}"`;
+          
+          // Inject Dynamic Ledger Entry into chat logs
+          appendLedgerMessage(data, true);
+
+          // Configure TTS Voice Playback
+          if (data.audioUrl) {
+            setCallState('speaking');
+            subtitleText.textContent = `"${data.confirmationText}"`;
+            
+            callCurrentAudio.src = `${serverUrl}${data.audioUrl}`;
+            
+            // Play natural confirmation audio
+            callCurrentAudio.play()
+              .catch(err => {
+                console.log("Auto-playback deferred by browser context.");
+                showToast("Press call ring to play audio confirmation.");
+              });
+
+            callCurrentAudio.onended = () => {
+              // Call finishes naturally, exit call overlay after delay
+              setTimeout(() => {
+                exitCallMode();
+              }, 1200);
+            };
+          } else {
+            showToast('Voice confirmation synthesis error.');
+            setTimeout(() => {
+              exitCallMode();
+            }, 1500);
+          }
+
+        } else {
+          throw new Error(data.message || 'Odia translation failed.');
+        }
+
+      } catch (err) {
+        console.error('Call mode pipeline error:', err);
+        showToast(err.message || 'Network error processing transaction.');
+        exitCallMode();
+      }
+    }
+  </script>
+</body>
+</html>
