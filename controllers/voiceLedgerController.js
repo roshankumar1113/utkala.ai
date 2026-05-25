@@ -175,6 +175,69 @@ async function processVoice(req, res) {
   }
 }
 
+/**
+ * POST /api/text-to-speech
+ * Independent endpoint that converts any Odia text block into premium audio.
+ */
+async function textToSpeech(req, res) {
+  const { text } = req.body;
+  console.log(`[Server TTS] Received text-to-speech request for: "${text?.substring(0, 50)}..."`);
+  
+  if (!text || text.trim() === '') {
+    return res.status(400).json({
+      success: false,
+      message: 'Text cannot be empty.'
+    });
+  }
+
+  try {
+    const audioUrl = await voiceService.generateSpeech(text);
+    return res.status(200).json({
+      success: true,
+      audioUrl: audioUrl
+    });
+  } catch (error) {
+    console.error('[Server TTS] Generation error:', error.message);
+    return res.status(502).json({
+      success: false,
+      message: 'Failed to synthesize speech.',
+      details: error.message
+    });
+  }
+}
+
+/**
+ * POST /api/transcribe
+ * Independent Speech-to-Text transcription endpoint.
+ */
+async function transcribeOnly(req, res) {
+  console.log('[Server STT] Incoming audio file for STT transcription');
+  
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: 'No audio file uploaded.'
+    });
+  }
+
+  try {
+    const transcription = await voiceService.transcribeAudio(req.file.buffer, req.file.originalname);
+    return res.status(200).json({
+      success: true,
+      transcription: transcription
+    });
+  } catch (error) {
+    console.error('[Server STT] Transcription error:', error.message);
+    return res.status(502).json({
+      success: false,
+      message: 'Failed to transcribe audio.',
+      details: error.message
+    });
+  }
+}
+
 module.exports = {
-  processVoice
+  processVoice,
+  textToSpeech,
+  transcribeOnly
 };

@@ -29,4 +29,17 @@ const upload = multer({
  */
 router.post('/process-voice', upload.single('file'), voiceLedgerController.processVoice);
 
+/**
+ * Route: POST /api/text-to-speech
+ * Controller: Translates Odia text to Bulbul voice Confirmation files.
+ */
+router.post('/text-to-speech', voiceLedgerController.textToSpeech);
+
+/**
+ * Route: POST /api/transcribe
+ * Middleware: Multer parses multipart/form-data for the 'file' field.
+ * Controller: Independent Speech-to-Text transcription.
+ */
+router.post('/transcribe', upload.single('file'), voiceLedgerController.transcribeOnly);
+
 module.exports = router;

@@ -1310,6 +1310,243 @@
         padding: 10px !important;
       }
     }
+
+    /* --------------------------------------------------
+       DYNAMIC UPGRADES: THEMES, AUDIO PLAYERS, DICTATION
+       -------------------------------------------------- */
+    /* Dynamic Theme Dropdown Selector */
+    .theme-selector-group {
+      position: relative;
+      display: inline-block;
+    }
+    .theme-trigger-btn {
+      font-size: 14px !important;
+      cursor: pointer;
+    }
+    .theme-menu-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 220px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      backdrop-filter: blur(25px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      padding: 10px;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-10px);
+      transition: var(--transition-bounce);
+    }
+    .theme-menu-dropdown.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .theme-menu-header {
+      font-family: var(--font-display);
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      margin-bottom: 8px;
+      padding: 0 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .theme-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: #cbd5e1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+      transition: var(--transition-smooth);
+    }
+    .theme-menu-item:hover {
+      background: rgba(255,255,255,0.05);
+      color: #ffffff;
+    }
+    .theme-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Floating Glass Audio Player inside Message Bubbles */
+    .message-bubble-wrapper {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .speak-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
+      color: #94a3b8;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition-bounce);
+      position: absolute;
+      bottom: -6px;
+      right: -32px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    .message-row.user .speak-btn {
+      display: none;
+    }
+    .speak-btn:hover, .speak-btn.active {
+      background: var(--accent-copper);
+      color: #020617;
+      border-color: var(--accent-copper);
+      box-shadow: 0 0 10px var(--accent-copper-glow);
+    }
+    .speak-btn.loading svg {
+      animation: spin-auth 0.8s linear infinite;
+    }
+    .speak-btn svg {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
+    }
+
+    /* Embedded Glass Audio Player Card */
+    .chat-audio-player-card {
+      margin-top: 8px;
+      background: rgba(9, 13, 22, 0.7);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      backdrop-filter: blur(10px);
+      box-shadow: inset 0 1px 0 var(--glass-highlight);
+      animation: slide-up-chat 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.15);
+    }
+    .audio-player-ctrl {
+      background: var(--accent-copper);
+      color: #020617;
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition-bounce);
+      box-shadow: 0 0 10px var(--accent-copper-glow);
+      flex-shrink: 0;
+    }
+    .audio-player-ctrl:hover {
+      transform: scale(1.08);
+    }
+    .audio-player-ctrl svg {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
+    }
+    .audio-progress-bar-container {
+      flex-grow: 1;
+      height: 4px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      position: relative;
+      cursor: pointer;
+    }
+    .audio-progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent-copper);
+      border-radius: 2px;
+      position: relative;
+      transition: width 0.1s linear;
+      box-shadow: 0 0 6px var(--accent-copper-glow);
+    }
+    .audio-progress-bar-fill::after {
+      content: "";
+      position: absolute;
+      top: -3px;
+      right: -5px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 6px var(--accent-copper-glow);
+    }
+    .audio-duration-label {
+      font-size: 10px;
+      color: #64748b;
+      font-weight: 600;
+      font-family: monospace;
+      flex-shrink: 0;
+    }
+
+    /* Dictating state & dictate microphone btn inside input bar */
+    .chat-textarea.dictating {
+      animation: dictate-pulse 1.5s ease-in-out infinite;
+      border-color: rgba(6, 182, 212, 0.4) !important;
+      background: rgba(6, 182, 212, 0.04) !important;
+    }
+    @keyframes dictate-pulse {
+      0%, 100% { border-color: rgba(6, 182, 212, 0.2); }
+      50% { border-color: rgba(6, 182, 212, 0.6); box-shadow: 0 0 8px rgba(6, 182, 212, 0.1); }
+    }
+    .dictate-mic-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(6, 182, 212, 0.08);
+      border: 1px solid rgba(6, 182, 212, 0.2);
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition-bounce);
+      flex-shrink: 0;
+    }
+    .dictate-mic-btn:hover {
+      background: var(--accent-cyan);
+      color: #020617;
+      box-shadow: 0 0 15px var(--accent-cyan-glow);
+      transform: scale(1.05);
+    }
+    .dictate-mic-btn.active {
+      background: #ef4444 !important;
+      border-color: #ef4444 !important;
+      color: #ffffff !important;
+      animation: spin-mic-glow 1.5s infinite alternate;
+    }
+    @keyframes spin-mic-glow {
+      from { box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); }
+      to { box-shadow: 0 0 15px rgba(239, 68, 68, 0.8); }
+    }
+    .dictate-mic-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    @keyframes slide-up-chat {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   </style>
 </head>
 <body>
@@ -1374,6 +1611,23 @@
       </div>
       
       <div class="header-actions">
+        <!-- Heritage Theme Selector -->
+        <div class="theme-selector-group">
+          <button onclick="toggleThemeMenu(event)" class="font-btn theme-trigger-btn" title="Change Theme / ରଙ୍ଗ ବଦଳାନ୍ତୁ">🎨</button>
+          <div id="themeMenu" class="theme-menu-dropdown">
+            <div class="theme-menu-header">ଓଡ଼ିଶା ମାଟି ରଙ୍ଗ (Select Theme)</div>
+            <button class="theme-menu-item" onclick="setTheme('amber')">
+              <span class="theme-dot" style="background:#f59e0b;"></span> Konark Sun Copper
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('teal')">
+              <span class="theme-dot" style="background:#06b6d4;"></span> Chilika Lagoon
+            </button>
+            <button class="theme-menu-item" onclick="setTheme('ruby')">
+              <span class="theme-dot" style="background:#f43f5e;"></span> Kalinga Ruby
+            </button>
+          </div>
+        </div>
+
         <!-- Font Size Adjustment -->
         <div class="font-group">
           <button onclick="changeFontSize('decrease')" class="font-btn" title="Decrease Font Size / ଅକ୍ଷର ଛୋଟ କରନ୍ତୁ">A-</button>
@@ -1472,6 +1726,12 @@
         </svg>
       </button>
       <textarea id="chatInput" class="chat-textarea" placeholder="Type in Odia, English, or transliterated..." rows="1"></textarea>
+      <!-- Inline Speech-to-Text Dictation Button -->
+      <button id="dictateMicBtn" class="dictate-mic-btn" title="Speak to Type / କଣ୍ଠସ୍ୱର ଦ୍ୱାରା ଲେଖନ୍ତୁ">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.4 2.72 6.2 6 6.72V21h2v-3.28c3.28-.52 6-3.32 6-6.72h-1.7z"/>
+        </svg>
+      </button>
       <button id="sendBtn" class="send-btn" title="Send Message">
         <svg viewBox="0 0 24 24">
           <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
@@ -1699,6 +1959,48 @@
       }
     }
     loadFontSize();
+
+    // --------------------------------------------------
+    // DYNAMIC HERITAGE THEME SYSTEM
+    // --------------------------------------------------
+    function toggleThemeMenu(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('themeMenu');
+      menu.classList.toggle('active');
+    }
+
+    function setTheme(theme) {
+      const root = document.documentElement;
+      if (theme === 'teal') {
+        root.style.setProperty('--accent-copper', '#06b6d4');
+        root.style.setProperty('--accent-copper-dark', '#0891b2');
+        root.style.setProperty('--accent-copper-glow', 'rgba(6, 182, 212, 0.45)');
+        localStorage.setItem('utkal_ai_theme', 'teal');
+      } else if (theme === 'ruby') {
+        root.style.setProperty('--accent-copper', '#f43f5e');
+        root.style.setProperty('--accent-copper-dark', '#e11d48');
+        root.style.setProperty('--accent-copper-glow', 'rgba(244, 63, 94, 0.45)');
+        localStorage.setItem('utkal_ai_theme', 'ruby');
+      } else {
+        // Default Konark Amber
+        root.style.setProperty('--accent-copper', '#f59e0b');
+        root.style.setProperty('--accent-copper-dark', '#d97706');
+        root.style.setProperty('--accent-copper-glow', 'rgba(245, 158, 11, 0.45)');
+        localStorage.setItem('utkal_ai_theme', 'amber');
+      }
+      const menu = document.getElementById('themeMenu');
+      if (menu) menu.classList.remove('active');
+      console.log(`[UI Theme] Swapped theme system color base to: ${theme}`);
+    }
+
+    // Close theme menu if clicked outside
+    window.addEventListener('click', () => {
+      document.getElementById('themeMenu')?.classList.remove('active');
+    });
+
+    // Load saved theme on boot
+    const savedTheme = localStorage.getItem('utkal_ai_theme') || 'amber';
+    setTheme(savedTheme);
 
     // State Variables
     let conversationHistory = [];
@@ -1929,11 +2231,31 @@
         avatar.innerHTML = 'ଓ';
       }
 
+      const bubbleWrapper = document.createElement('div');
+      bubbleWrapper.className = 'message-bubble-wrapper';
+      bubbleWrapper.style.position = 'relative';
+
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
 
+      bubbleWrapper.appendChild(bubble);
+
+      // Add speak button for bot messages
+      if (role === 'bot') {
+        const speakBtn = document.createElement('button');
+        speakBtn.className = 'speak-btn';
+        speakBtn.title = 'Listen in Odia / ଓଡ଼ିଆ କଣ୍ଠସ୍ୱର';
+        speakBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+          </svg>
+        `;
+        speakBtn.addEventListener('click', () => triggerMessageSpeech(speakBtn, bubbleWrapper, text));
+        bubbleWrapper.appendChild(speakBtn);
+      }
+
       wrapper.appendChild(avatar);
-      wrapper.appendChild(bubble);
+      wrapper.appendChild(bubbleWrapper);
       messageRow.appendChild(wrapper);
       chatViewport.appendChild(messageRow);
       scrollToBottom();
@@ -2329,6 +2651,234 @@
         console.error('Call mode pipeline error:', err);
         showToast(err.message || 'Network error processing transaction.');
         exitCallMode();
+      }
+    }
+
+    // --------------------------------------------------
+    // DYNAMIC UPGRADE: DYNAMIC TEXT-TO-SPEECH PLAYER
+    // --------------------------------------------------
+    async function triggerMessageSpeech(btn, container, rawText) {
+      // Toggle play if already initialized
+      const existingPlayer = container.querySelector('.chat-audio-player-card');
+      if (existingPlayer) {
+        const audio = existingPlayer.audioInstance;
+        const playBtn = existingPlayer.querySelector('.audio-player-ctrl');
+        const playIcon = playBtn.querySelector('.play-icon');
+        const pauseIcon = playBtn.querySelector('.pause-icon');
+        
+        if (audio.paused) {
+          audio.play();
+          playIcon.style.display = 'none';
+          pauseIcon.style.display = 'block';
+          btn.classList.add('active');
+        } else {
+          audio.pause();
+          playIcon.style.display = 'block';
+          pauseIcon.style.display = 'none';
+          btn.classList.remove('active');
+        }
+        return;
+      }
+
+      // Add loading state
+      btn.classList.add('loading');
+
+      // Clean raw text to make speaking natural (strips markdown headers, bullets, backticks)
+      const cleanText = rawText
+        .replace(/`[\s\S]*?`/g, '') // strip code
+        .replace(/[#*_\-#]/g, '') // strip markdown
+        .replace(/<\/?[^>]+(>|$)/g, "") // strip HTML tags
+        .trim();
+
+      try {
+        const response = await fetch(`${serverUrl}/api/text-to-speech`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: cleanText })
+        });
+
+        const data = await response.json();
+        btn.classList.remove('loading');
+
+        if (!response.ok || !data.success || !data.audioUrl) {
+          throw new Error(data.message || 'TTS pipeline failed.');
+        }
+
+        // Initialize Audio Instance
+        const audio = new Audio(`${serverUrl}${data.audioUrl}`);
+        btn.classList.add('active');
+
+        // Create player card markup
+        const playerCard = document.createElement('div');
+        playerCard.className = 'chat-audio-player-card';
+        playerCard.innerHTML = `
+          <button class="audio-player-ctrl" title="Play/Pause">
+            <svg viewBox="0 0 24 24" class="play-icon" style="display:none;"><path d="M8 5v14l11-7z"/></svg>
+            <svg viewBox="0 0 24 24" class="pause-icon" style="display:block;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          </button>
+          <div class="audio-progress-bar-container">
+            <div class="audio-progress-bar-fill"></div>
+          </div>
+          <span class="audio-duration-label">0:00</span>
+        `;
+
+        playerCard.audioInstance = audio;
+        container.appendChild(playerCard);
+
+        const ctrlBtn = playerCard.querySelector('.audio-player-ctrl');
+        const playIcon = ctrlBtn.querySelector('.play-icon');
+        const pauseIcon = ctrlBtn.querySelector('.pause-icon');
+        const fill = playerCard.querySelector('.audio-progress-bar-fill');
+        const progressContainer = playerCard.querySelector('.audio-progress-bar-container');
+        const durationLabel = playerCard.querySelector('.audio-duration-label');
+
+        audio.play().catch(e => console.log('Autoplay deferred.'));
+
+        // Audio Events
+        audio.ontimeupdate = () => {
+          if (!audio.duration) return;
+          const percentage = (audio.currentTime / audio.duration) * 100;
+          fill.style.width = `${percentage}%`;
+          
+          const mins = Math.floor(audio.currentTime / 60);
+          const secs = Math.floor(audio.currentTime % 60).toString().padStart(2, '0');
+          durationLabel.textContent = `${mins}:${secs}`;
+        };
+
+        audio.onended = () => {
+          playIcon.style.display = 'block';
+          pauseIcon.style.display = 'none';
+          fill.style.width = '0%';
+          btn.classList.remove('active');
+          playerCard.remove(); // Cleanly remove player card when audio finishes playing
+        };
+
+        ctrlBtn.addEventListener('click', () => {
+          if (audio.paused) {
+            audio.play();
+            playIcon.style.display = 'none';
+            pauseIcon.style.display = 'block';
+            btn.classList.add('active');
+          } else {
+            audio.pause();
+            playIcon.style.display = 'block';
+            pauseIcon.style.display = 'none';
+            btn.classList.remove('active');
+          }
+        });
+
+        // Drag/Click Seek
+        progressContainer.addEventListener('click', (e) => {
+          if (!audio.duration) return;
+          const rect = progressContainer.getBoundingClientRect();
+          const clickPos = (e.clientX - rect.left) / rect.width;
+          audio.currentTime = clickPos * audio.duration;
+        });
+
+      } catch (err) {
+        btn.classList.remove('loading');
+        console.error('[Speak Response] Error:', err);
+        showToast('କଣ୍ଠସ୍ୱର ସଫଳ ହେଲାନାହିଁ (Failed to generate speech).');
+      }
+    }
+
+    // --------------------------------------------------
+    // DYNAMIC UPGRADE: INLINE SPEECH DICTATION (SPEAK-TO-TYPE)
+    // --------------------------------------------------
+    const dictateMicBtn = document.getElementById('dictateMicBtn');
+    let inlineMediaRecorder = null;
+    let inlineAudioChunks = [];
+    let isDictating = false;
+
+    dictateMicBtn.addEventListener('click', async () => {
+      if (isDictating) {
+        // Stop recording
+        if (inlineMediaRecorder && inlineMediaRecorder.state !== 'inactive') {
+          inlineMediaRecorder.stop();
+        }
+        isDictating = false;
+        dictateMicBtn.classList.remove('active');
+        chatInput.classList.remove('dictating');
+        chatInput.placeholder = "Type in Odia, English, or transliterated...";
+      } else {
+        // Start recording
+        inlineAudioChunks = [];
+        isDictating = true;
+        dictateMicBtn.classList.add('active');
+        chatInput.classList.add('dictating');
+        chatInput.placeholder = "କହୁଛନ୍ତି... (Speaking... speak clearly now)";
+        showToast("କଣ୍ଠସ୍ୱର ରେକର୍ଡିଂ ଆରମ୍ଭ ହେଲା...");
+
+        try {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("Speech capture not supported on this browser.");
+          }
+
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          inlineMediaRecorder = new MediaRecorder(stream);
+          
+          inlineMediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) inlineAudioChunks.push(e.data);
+          };
+
+          inlineMediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(track => track.stop());
+            showToast("ସ୍ୱର ବିଶ୍ଳେଷଣ କରାଯାଉଛି...");
+            
+            const audioBlob = new Blob(inlineAudioChunks, { type: 'audio/wav' });
+            if (audioBlob.size < 500) {
+              showToast("ସ୍ୱର ଅତି ଛୋଟ ଅଟେ।");
+              return;
+            }
+
+            await uploadDictation(audioBlob);
+          };
+
+          inlineMediaRecorder.start();
+
+        } catch (err) {
+          console.error('[Dictation] Error:', err);
+          showToast(err.message || 'Microphone capture failed.');
+          isDictating = false;
+          dictateMicBtn.classList.remove('active');
+          chatInput.classList.remove('dictating');
+          chatInput.placeholder = "Type in Odia, English, or transliterated...";
+        }
+      }
+    });
+
+    async function uploadDictation(blob) {
+      try {
+        const formData = new FormData();
+        formData.append('file', blob, 'dictation.wav');
+
+        const response = await fetch(`${serverUrl}/api/transcribe`, {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.message || 'STT failed.');
+        }
+
+        // Insert transcribed text into textarea
+        if (data.transcription && data.transcription.trim() !== '') {
+          const prevVal = chatInput.value.trim();
+          chatInput.value = prevVal ? `${prevVal} ${data.transcription}` : data.transcription;
+          chatInput.style.height = 'auto';
+          chatInput.style.height = `${chatInput.scrollHeight}px`;
+          showToast("ସ୍ୱର ଟାଇପ୍ ସଫଳ ହେଲା!");
+          chatInput.focus();
+        } else {
+          showToast("ସ୍ୱର ବୁଝାପଡିଲାନାହିଁ, ଆଉଥରେ ଚେଷ୍ଟା କରନ୍ତୁ।");
+        }
+
+      } catch (err) {
+        console.error('[Upload Dictation] Error:', err);
+        showToast('ସ୍ୱର ଅନୁବାଦ ହେଲାନାହିଁ (Failed to transcribe speech).');
+      } finally {
+        chatInput.placeholder = "Type in Odia, English, or transliterated...";
       }
     }
   </script>
