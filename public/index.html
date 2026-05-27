@@ -2610,6 +2610,23 @@
         if (data.success) {
           console.log('[Voice Mode] Pipeline success! Transcription:', data.transcription);
           
+          // Graceful fallback to text mode handling
+          if (data.fallback_to_text) {
+            console.log('[Voice Mode] Graceful fallback triggered! Notice:', data.notice);
+            exitCallMode();
+            showToast(data.notice);
+            
+            // If the transaction parsed successfully but only TTS failed, still record the ledger entry!
+            if (data.transaction && data.transaction.action !== 'UNKNOWN') {
+              appendLedgerMessage(data, true);
+            }
+            
+            appendMessage('bot', data.notice);
+            conversationHistory.push({ role: 'bot', text: data.notice });
+            localStorage.setItem('utkal_ai_chat_history', JSON.stringify(conversationHistory));
+            return;
+          }
+
           // Display user transcription instantly
           subtitleText.textContent = `"${data.transcription}"`;
           
@@ -2649,8 +2666,14 @@
 
       } catch (err) {
         console.error('Call mode pipeline error:', err);
-        showToast(err.message || 'Network error processing transaction.');
         exitCallMode();
+        
+        const friendlyNotice = 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ବିଳମ୍ବ ହେତୁ ଆପଣଙ୍କ କଣ୍ଠସ୍ୱର ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଲେଖନ୍ତୁ ଏବଂ ପୁଣିଥରେ ଚେଷ୍ଟา କରନ୍ତୁ ।';
+        showToast(friendlyNotice);
+        
+        appendMessage('bot', friendlyNotice);
+        conversationHistory.push({ role: 'bot', text: friendlyNotice });
+        localStorage.setItem('utkal_ai_chat_history', JSON.stringify(conversationHistory));
       }
     }
 

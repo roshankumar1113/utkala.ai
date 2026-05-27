@@ -96,22 +96,41 @@ async function processVoice(req, res) {
     try {
       transcribedText = await voiceService.transcribeAudio(req.file.buffer, req.file.originalname);
     } catch (sttError) {
-      console.error('[Pipeline] Step A (STT) Failed:', sttError.message);
-      return res.status(502).json({
-        success: false,
-        error_stage: 'Speech-to-Text (Sarvam AI)',
-        message: 'Failed to transcribe the audio. Please check the voice clarity or Sarvam API configurations.',
-        details: sttError.message
+      console.error('[Pipeline] Step A (STT) Failed gracefully caught:', sttError.message);
+      return res.status(200).json({
+        success: true,
+        fallback_to_text: true,
+        transcription: 'କଣ୍ଠସ୍ୱର ଚିହ୍ନଟ ହୋଇପାରିଲା ନାହିଁ।',
+        transaction: {
+          action: 'UNKNOWN',
+          party: 'N/A',
+          amount: 0,
+          item: 'N/A',
+          payment_type: 'UNKNOWN'
+        },
+        confirmationText: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ସମସ୍ୟା ହେତୁ କଣ୍ଠସ୍ୱର ଚିହ୍ନଟ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଲେଖନ୍ତୁ ।',
+        audioUrl: null,
+        notice: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ବିଳମ୍ବ ହେତୁ ଆପଣଙ୍କ କଣ୍ଠସ୍ୱର ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଲେଖନ୍ତୁ ଏବଂ ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ ।'
       });
     }
 
     // Edge case: Transcription succeeded but returned empty text
     if (!transcribedText || transcribedText.trim() === '') {
       console.warn('[Pipeline] Step A succeeded but transcription text is empty.');
-      return res.status(422).json({
-        success: false,
-        error_stage: 'Speech-to-Text Validation',
-        message: 'Audio transcription returned empty text. Please record a clearer voice message.'
+      return res.status(200).json({
+        success: true,
+        fallback_to_text: true,
+        transcription: 'ଖାଲି ସ୍ୱର।',
+        transaction: {
+          action: 'UNKNOWN',
+          party: 'N/A',
+          amount: 0,
+          item: 'N/A',
+          payment_type: 'UNKNOWN'
+        },
+        confirmationText: 'ଆପଣଙ୍କ ସ୍ୱର ସ୍ପଷ୍ଟ ଶୁଭିଲା ନାହିଁ। ଦୟାକରି ପୁଣିଥରେ ସ୍ପଷ୍ଟ ଭାବରେ କୁହନ୍ତୁ କିମ୍ବା ଟେକ୍ସଟ୍ ମାଧ୍ୟମରେ ଲେଖନ୍ତୁ ।',
+        audioUrl: null,
+        notice: 'ଆପଣଙ୍କ ସ୍ୱର ସ୍ପଷ୍ଟ ଶୁଭିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଲେଖନ୍ତୁ କିମ୍ବା ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ ।'
       });
     }
 
@@ -120,13 +139,21 @@ async function processVoice(req, res) {
     try {
       transactionJSON = await ledgerParserService.analyzeTransaction(transcribedText);
     } catch (geminiError) {
-      console.error('[Pipeline] Step B (Ledger Parser) Failed:', geminiError.message);
-      return res.status(502).json({
-        success: false,
-        error_stage: 'AI Brain & JSON Extraction (Gemini 2.5 Flash)',
-        message: 'Failed to extract structured transactional details from Odia script.',
-        details: geminiError.message,
-        transcription: transcribedText
+      console.error('[Pipeline] Step B (Ledger Parser) Failed gracefully caught:', geminiError.message);
+      return res.status(200).json({
+        success: true,
+        fallback_to_text: true,
+        transcription: transcribedText,
+        transaction: {
+          action: 'UNKNOWN',
+          party: 'N/A',
+          amount: 0,
+          item: 'N/A',
+          payment_type: 'UNKNOWN'
+        },
+        confirmationText: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ସମସ୍ୟା ହେତୁ ଆପଣଙ୍କ ବ୍ୟବସାୟିକ କାରବାର ବିଶ୍ଳେଷଣ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ ମାଧ୍ୟମରେ ଚେଷ୍ଟା କରନ୍ତୁ ।',
+        audioUrl: null,
+        notice: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ସମସ୍ୟା ଯୋଗୁଁ କାରବାର ବିଶ୍ଳେଷଣ ବିଫଳ ହେଲା । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଲେଖି ଚେଷ୍ଟା କରନ୍ତୁ ।'
       });
     }
 
@@ -139,17 +166,16 @@ async function processVoice(req, res) {
     try {
       audioUrl = await voiceService.generateSpeech(confirmationText);
     } catch (ttsError) {
-      console.error('[Pipeline] Step C (TTS) Failed:', ttsError.message);
-      // Notice: If TTS fails, we still return the structured JSON data as it is valuable to the user.
-      console.warn('[Pipeline] Continuing transaction output without speech confirmation due to TTS error.');
+      console.error('[Pipeline] Step C (TTS) Failed gracefully caught:', ttsError.message);
+      // Notice: If TTS fails, we return the parsed transaction successfully, but with fallback_to_text enabled and a friendly voice notice
       return res.status(200).json({
         success: true,
         transcription: transcribedText,
         transaction: transactionJSON,
         confirmationText: confirmationText,
         audioUrl: null,
-        warning: 'Speech generation failed, but transaction details were extracted successfully.',
-        warning_details: ttsError.message
+        fallback_to_text: true,
+        notice: 'ବ୍ୟବସାୟିକ କାରବାର ସଫଳତାର ସହ ଲିପିବଦ୍ଧ ହେଲା, କିନ୍ତୁ ନେଟୱର୍କ ସମସ୍ୟା ଯୋଗୁଁ ସ୍ୱର ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଯାଞ୍ଚ କରନ୍ତୁ ।'
       });
     }
 
@@ -197,11 +223,12 @@ async function textToSpeech(req, res) {
       audioUrl: audioUrl
     });
   } catch (error) {
-    console.error('[Server TTS] Generation error:', error.message);
-    return res.status(502).json({
-      success: false,
-      message: 'Failed to synthesize speech.',
-      details: error.message
+    console.error('[Server TTS] Generation error gracefully caught:', error.message);
+    return res.status(200).json({
+      success: true,
+      audioUrl: null,
+      fallback_to_text: true,
+      notice: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ସମସ୍ୟା ହେତୁ ଓଡ଼ିଆ କଣ୍ଠସ୍ୱର ସଂଶ୍ଳେଷଣ ସଫଳ ହେଲାନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଆଲୋଚନା ଜାରି ରଖନ୍ତୁ ।'
     });
   }
 }
@@ -227,11 +254,12 @@ async function transcribeOnly(req, res) {
       transcription: transcription
     });
   } catch (error) {
-    console.error('[Server STT] Transcription error:', error.message);
-    return res.status(502).json({
-      success: false,
-      message: 'Failed to transcribe audio.',
-      details: error.message
+    console.error('[Server STT] Transcription error gracefully caught:', error.message);
+    return res.status(200).json({
+      success: true,
+      transcription: 'କଣ୍ଠସ୍ୱର ଚିହ୍ନଟ ବିଫଳ।',
+      fallback_to_text: true,
+      notice: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ବିଳମ୍ବ ଯୋଗୁଁ କଣ୍ଠସ୍ୱର ଅନୁବାଦ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଚେଷ୍ଟା କରନ୍ତୁ ।'
     });
   }
 }

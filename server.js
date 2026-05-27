@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const voiceLedgerRoutes = require('./routes/voiceLedgerRoutes');
 const chatService = require('./services/chatService');
+const aiController = require('./controllers/aiController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,6 +39,7 @@ app.get('/', (req, res) => {
 
 // API Routes
 app.use('/api', voiceLedgerRoutes); // Mount /api/process-voice voice ledger routing endpoint
+app.post('/api/query-rag', aiController.handleUtkalQuery); // Mount local RAG query semantic endpoint
 
 // Single Unified Text Chat POST Endpoint
 async function handleChat(req, res) {
@@ -92,10 +94,26 @@ app.use((err, req, res, next) => {
 });
 
 // Start Chat Server
-app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('==================================================');
   console.log(`🚀 Utkal.ai Chat & Voice Server running on Port ${PORT}`);
   console.log(`👉 Chat Interface: http://localhost:${PORT}`);
   console.log(`👉 Voice API: http://localhost:${PORT}/api/process-voice`);
   console.log('==================================================');
+});
+
+// Resilient error handling for server port binding
+server.on('error', (error) => {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+  switch (error.code) {
+    case 'EADDRINUSE':
+      console.error(`[Server Launch Error] Port ${PORT} is already in use by another local process.`);
+      process.exit(1);
+      break;
+    default:
+      console.error(`[Server Launch Error] System error during initialization:`, error);
+      throw error;
+  }
 });

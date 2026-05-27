@@ -28,7 +28,7 @@ async function transcribeAudio(fileBuffer, originalName) {
     
     formData.append('file', fileBlob, originalName || 'audio.wav');
     formData.append('model', 'saaras:v3');
-    formData.append('language_code', 'or-IN');
+    formData.append('language_code', 'od-IN');
 
     console.log(`[Voice STT] Initiating transcription for file: ${originalName || 'audio.wav'}, size: ${fileBuffer.length} bytes`);
 
@@ -36,7 +36,8 @@ async function transcribeAudio(fileBuffer, originalName) {
       headers: {
         'api-subscription-key': sarvamApiKey
         // Content-Type is automatically set with boundary for FormData in Axios
-      }
+      },
+      timeout: 8000
     });
 
     if (response.data && response.data.transcript) {
@@ -70,7 +71,7 @@ async function generateSpeech(text) {
 
     const payload = {
       text: text,
-      target_language_code: 'or-IN',
+      target_language_code: 'od-IN',
       model: 'bulbul:v3',
       speaker: 'shubh', // Default premium speaker for bulbul:v3
       speech_sample_rate: 22050,
@@ -82,7 +83,8 @@ async function generateSpeech(text) {
       headers: {
         'api-subscription-key': sarvamApiKey,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 8000
     });
 
     if (response.data && response.data.audios && response.data.audios.length > 0) {

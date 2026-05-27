@@ -1,5 +1,5 @@
 require('dotenv').config();
-const geminiService = require('./services/geminiService');
+const geminiService = require('./services/ledgerParserService');
 
 // Sample Odia text phrases to test the parsing extraction and training prompts
 const TEST_CASES = [

@@ -92,7 +92,8 @@ async function analyzeTransaction(odiaText) {
     const response = await axios.post(`${GEMINI_API_URL}?key=${geminiApiKey}`, payload, {
       headers: {
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 8000
     });
 
     if (response.data && response.data.candidates && response.data.candidates.length > 0) {
