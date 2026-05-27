@@ -89,14 +89,33 @@ async function analyzeTransaction(odiaText) {
       }
     };
 
-    const response = await axios.post(`${GEMINI_API_URL}?key=${geminiApiKey}`, payload, {
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      timeout: 8000
-    });
+    let response;
+    let retries = 3;
+    let delay = 1500;
 
-    if (response.data && response.data.candidates && response.data.candidates.length > 0) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        response = await axios.post(`${GEMINI_API_URL}?key=${geminiApiKey}`, payload, {
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          timeout: 8000
+        });
+        break; // Success! Break out of the retry loop.
+      } catch (error) {
+        const errMessage = error.response?.data?.error?.message || error.message;
+        const isRateLimit = error.response?.status === 429 || errMessage.includes('429') || errMessage.includes('RESOURCE_EXHAUSTED') || errMessage.includes('quota');
+        if (isRateLimit && attempt < retries) {
+          console.warn(`[Ledger Parser] Quota hit (429). Retrying attempt ${attempt}/${retries} in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // Double the backoff delay
+        } else {
+          throw error; // Rethrow other errors or final attempt failure
+        }
+      }
+    }
+
+    if (response && response.data && response.data.candidates && response.data.candidates.length > 0) {
       const parsedText = response.data.candidates[0].content.parts[0].text;
       console.log(`[Ledger Parser] Received raw model output: ${parsedText.trim()}`);
       
@@ -105,7 +124,7 @@ async function analyzeTransaction(odiaText) {
       console.log('[Ledger Parser] Successfully parsed JSON output:', transactionData);
       return transactionData;
     } else {
-      console.warn('[Ledger Parser] Response did not contain candidates:', response.data);
+      console.warn('[Ledger Parser] Response did not contain candidates:', response ? response.data : 'No response');
       throw new Error('Gemini Analysis failed. Invalid response structure from Gemini API.');
     }
   } catch (error) {

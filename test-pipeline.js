@@ -56,6 +56,9 @@ async function runTests() {
       console.error(error.message);
       console.log('--------------------------------------------------');
     }
+
+    // Add a 1000ms delay between test cases to pacify free-tier rate limits
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   console.log('\n🏁 Test suite completed!');

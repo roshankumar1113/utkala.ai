@@ -50,21 +50,40 @@ const handleUtkalQuery = async (req, res) => {
       throw new Error('Google Gen AI SDK is not initialized. Please check your GEMINI_API_KEY configuration.');
     }
 
-    // 3. EXECUTE COGNITIVE BRAIN INFERENCE WITH TIMEOUT SAFEGUARDS
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('RAG Query timed out due to network latency.')), 8000)
-    );
+    // 3. EXECUTE COGNITIVE BRAIN INFERENCE WITH TIMEOUT SAFEGUARDS & RETRY LOOP
+    let response;
+    let retries = 3;
+    let delay = 1500;
 
-    const apiCallPromise = ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents: query,
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.2, // Kept low to ensure strict factual compliance and zero hallucination
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('RAG Query timed out due to network latency.')), 8000)
+        );
+
+        const apiCallPromise = ai.models.generateContent({
+          model: "gemini-2.5-flash-lite",
+          contents: query,
+          config: {
+            systemInstruction: systemInstruction,
+            temperature: 0.2, // Kept low to ensure strict factual compliance and zero hallucination
+          }
+        });
+
+        response = await Promise.race([apiCallPromise, timeoutPromise]);
+        break; // Success! Break out of the retry loop.
+      } catch (error) {
+        const errMessage = error.message || '';
+        const isRateLimit = error.status === 429 || errMessage.includes('429') || errMessage.includes('RESOURCE_EXHAUSTED') || errMessage.includes('quota');
+        if (isRateLimit && attempt < retries) {
+          console.warn(`[AI Controller RAG] Quota hit (429). Retrying attempt ${attempt}/${retries} in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // Double the backoff delay
+        } else {
+          throw error; // Rethrow other errors or final attempt failure
+        }
       }
-    });
-
-    const response = await Promise.race([apiCallPromise, timeoutPromise]);
+    }
 
     // 4. RETURN PAYLOAD FOR GRAPHICAL DASHBOARD DISPLAY
     return res.status(200).json({
