@@ -1,0 +1,189 @@
+version: '3.9'
+
+services:
+  # Main Utkal.ai App
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: utkala-app
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SARVAM_API_KEY: ${SARVAM_API_KEY}
+
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/utkala_agents
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - ../public:/app/public
+      - ../logs:/app/logs
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Message Queue
+  redis:
+    image: redis:7-alpine
+    container_name: utkala-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  # Agent Database
+  db:
+    image: postgres:15-alpine
+    container_name: utkala-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: utkala_agents
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Test Agent Worker
+  test-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        AGENT_TYPE: test
+    container_name: utkala-test-agent
+    environment:
+      AGENT_ID: test-1
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/utkala_agents
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      NODE_ENV: production
+    depends_on:
+      - redis
+      - db
+    command: node agents/test-agent.js
+    restart: unless-stopped
+
+  # Bug Detector Agent Worker
+  bug-detector-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        AGENT_TYPE: bug-detector
+    container_name: utkala-bug-detector-agent
+    environment:
+      AGENT_ID: bug-detector-1
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/utkala_agents
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      NODE_ENV: production
+    depends_on:
+      - redis
+      - db
+    command: node agents/bug-detector-agent.js
+    restart: unless-stopped
+
+  # Feature Developer Agent
+  feature-developer-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        AGENT_TYPE: feature-dev
+    container_name: utkala-feature-agent
+    environment:
+      AGENT_ID: feature-dev-1
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/utkala_agents
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      NODE_ENV: production
+    depends_on:
+      - redis
+      - db
+    command: node agents/feature-developer-agent.js
+    restart: unless-stopped
+
+  # Deployment Agent
+  deployment-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        AGENT_TYPE: deployment
+    container_name: utkala-deployment-agent
+    environment:
+      AGENT_ID: deployment-1
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/utkala_agents
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      DOCKER_REGISTRY: ${DOCKER_REGISTRY:-docker.io}
+      DOCKER_USERNAME: ${DOCKER_USERNAME}
+      DOCKER_PASSWORD: ${DOCKER_PASSWORD}
+      NODE_ENV: production
+    depends_on:
+      - redis
+      - db
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: node agents/deployment-agent.js
+    restart: unless-stopped
+
+  # Monitoring Agent
+  monitoring-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        AGENT_TYPE: monitoring
+    container_name: utkala-monitoring-agent
+    environment:
+      AGENT_ID: monitoring-1
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/utkala_agents
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      SLACK_WEBHOOK: ${SLACK_WEBHOOK}
+      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK}
+      NODE_ENV: production
+    depends_on:
+      - redis
+      - db
+    command: node agents/monitoring-agent.js
+    restart: unless-stopped
+
+  # Webhook Receiver (listens to GitHub events)
+  webhook-receiver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: utkala-webhook-receiver
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/utkala_agents
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+      NODE_ENV: production
+    depends_on:
+      - redis
+      - db
+    command: node webhook-receiver.js
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  postgres-data:

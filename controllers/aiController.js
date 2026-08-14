@@ -50,19 +50,28 @@ const handleUtkalQuery = async (req, res) => {
       throw new Error('Google Gen AI SDK is not initialized. Please check your GEMINI_API_KEY configuration.');
     }
 
-    // 3. EXECUTE COGNITIVE BRAIN INFERENCE WITH TIMEOUT SAFEGUARDS & RETRY LOOP
-    let response;
-    let retries = 3;
-    let delay = 1500;
+    // 3. EXECUTE COGNITIVE BRAIN INFERENCE WITH MULTI-MODEL FALLBACK & TIMEOUT SAFEGUARDS
+    const FALLBACK_MODELS = [
+      "gemini-2.5-flash-lite",
+      "gemini-3.5-flash-lite",
+      "gemini-3.6-flash",
+      "gemini-3.7-flash",
+      "gemini-3.1-flash-lite",
+      "gemini-flash-lite-latest"
+    ];
 
-    for (let attempt = 1; attempt <= retries; attempt++) {
+    let response;
+    let lastError;
+
+    for (const modelName of FALLBACK_MODELS) {
       try {
+        console.log(`[AI Controller RAG] Attempting RAG query with model: ${modelName}...`);
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('RAG Query timed out due to network latency.')), 8000)
         );
 
         const apiCallPromise = ai.models.generateContent({
-          model: "gemini-2.5-flash-lite",
+          model: modelName,
           contents: query,
           config: {
             systemInstruction: systemInstruction,
@@ -71,19 +80,21 @@ const handleUtkalQuery = async (req, res) => {
         });
 
         response = await Promise.race([apiCallPromise, timeoutPromise]);
-        break; // Success! Break out of the retry loop.
-      } catch (error) {
-        const errMessage = error.message || '';
-        const isRateLimit = error.status === 429 || errMessage.includes('429') || errMessage.includes('RESOURCE_EXHAUSTED') || errMessage.includes('quota');
-        if (isRateLimit && attempt < retries) {
-          console.warn(`[AI Controller RAG] Quota hit (429). Retrying attempt ${attempt}/${retries} in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2; // Double the backoff delay
-        } else {
-          throw error; // Rethrow other errors or final attempt failure
+        if (response && response.text) {
+          console.log(`[AI Controller RAG] Model (${modelName}) successfully generated RAG response.`);
+          break; // Success! Break out of the fallback loop.
         }
+      } catch (error) {
+        lastError = error;
+        const errMessage = error.message || '';
+        console.warn(`[AI Controller RAG] Model ${modelName} failed: ${errMessage}. Rotating to next fallback model...`);
       }
     }
+
+    if (!response || !response.text) {
+      throw lastError || new Error('All RAG fallback models failed.');
+    }
+
 
     // 4. RETURN PAYLOAD FOR GRAPHICAL DASHBOARD DISPLAY
     return res.status(200).json({

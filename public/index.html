@@ -1814,7 +1814,10 @@
        -------------------------------------------------- -->
   <script>
     // DOM Selectors
-    const serverUrl = "https://utkala-ai.onrender.com";
+    const serverUrl = window.location.protocol.startsWith('http') 
+      ? window.location.origin 
+      : 'http://localhost:5000';
+
     const chatViewport = document.getElementById('chatViewport');
     const welcomeSplash = document.getElementById('welcomeSplash');
     const chatInput = document.getElementById('chatInput');

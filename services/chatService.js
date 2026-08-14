@@ -1,7 +1,14 @@
 const axios = require('axios');
 
-// Endpoint for Gemini 2.5 Flash Lite Content Generation API
-const GEMINI_2_5_FLASH_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+// Supported active Gemini models ordered by speed and preference
+const FALLBACK_MODELS = [
+  'gemini-2.5-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-3.7-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-lite-latest'
+];
 
 const CHAT_SYSTEM_PROMPT = `You are Utkal.ai, a completely free, open-domain, universal AI assistant built for the people of Odisha. Your primary purpose is to make all human knowledge completely accessible to anyone who speaks Odia, acting as an unrestricted regional Gemini oracle.
 
@@ -32,87 +39,74 @@ CORE OPERATIONAL MANDATES:
 6. STRICT CODE GENERATION & TECHNICAL BAN: You must NEVER output HTML, CSS, JavaScript, or any programming source code blocks. Never offer developer-centric templates, UI components, or software advice. Never refer to yourself as a "Frontend Architect" or developer. Your target audience consists of regular citizens, kids, and shopkeepers. Keep all responses strictly in clean, human-readable Odia text, checklists, and formatted Markdown tables using everyday local terminology.`;
 
 /**
- * Sends a message to the Gemini 2.5 Flash model and generates a rich, localized Odia response.
- * Handles inputs written in Odia script or English-transliterated Odia script.
+ * Sends a message to Gemini with Multi-Model Fallback rotation to prevent quota errors.
  * 
  * @param {string} userMessage - Message submitted by user.
  * @returns {Promise<string>} - Rich step-by-step response in Odia.
  */
 async function generateUniversalResponse(userMessage) {
-  try {
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey || geminiApiKey === 'your_gemini_api_key_here') {
-      throw new Error('Gemini API Key is not configured in your .env file.');
-    }
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  if (!geminiApiKey || geminiApiKey === 'your_gemini_api_key_here') {
+    throw new Error('Gemini API Key is not configured in your .env file.');
+  }
 
-    console.log(`[Chat Service] Analyzing input: "${userMessage}"`);
+  console.log(`[Chat Service] Analyzing input: "${userMessage}"`);
 
-    // Build Gemini API payload with system instructions
-    const payload = {
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: userMessage
-            }
-          ]
-        }
-      ],
-      systemInstruction: {
+  const payload = {
+    contents: [
+      {
+        role: 'user',
         parts: [
           {
-            text: CHAT_SYSTEM_PROMPT
+            text: userMessage
           }
         ]
-      },
-      generationConfig: {
-        temperature: 0.3, // Warm and engaging, while remaining factually disciplined
-        topP: 0.95,
-        maxOutputTokens: 2048
       }
-    };
-
-    let response;
-    let retries = 3;
-    let delay = 1500;
-
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        response = await axios.post(`${GEMINI_2_5_FLASH_URL}?key=${geminiApiKey}`, payload, {
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          timeout: 8000
-        });
-        break; // Success! Break out of the retry loop.
-      } catch (error) {
-        const errMessage = error.response?.data?.error?.message || error.message;
-        const isRateLimit = error.response?.status === 429 || errMessage.includes('429') || errMessage.includes('RESOURCE_EXHAUSTED') || errMessage.includes('quota');
-        if (isRateLimit && attempt < retries) {
-          console.warn(`[Chat Service] Quota hit (429). Retrying attempt ${attempt}/${retries} in ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2; // Double the backoff delay
-        } else {
-          throw error; // Rethrow other errors or final attempt failure
+    ],
+    systemInstruction: {
+      parts: [
+        {
+          text: CHAT_SYSTEM_PROMPT
         }
-      }
+      ]
+    },
+    generationConfig: {
+      temperature: 0.3,
+      topP: 0.95,
+      maxOutputTokens: 2048
     }
+  };
 
-    if (response && response.data && response.data.candidates && response.data.candidates.length > 0) {
-      const chatResponse = response.data.candidates[0].content.parts[0].text;
-      console.log(`[Chat Service] Model response successfully received.`);
-      return chatResponse.trim();
-    } else {
-      console.warn('[Chat Service] Response missing candidates:', response ? response.data : 'No response');
-      throw new Error('Failed to generate response. Invalid response structure from Gemini API.');
+  let lastError;
+
+  // Try each model sequentially to bypass quota/rate limits on individual models
+  for (const modelName of FALLBACK_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
+    try {
+      console.log(`[Chat Service] Attempting request using model: ${modelName}...`);
+      const response = await axios.post(url, payload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+
+      if (response && response.data && response.data.candidates && response.data.candidates.length > 0) {
+        const chatResponse = response.data.candidates[0].content.parts[0].text;
+        console.log(`[Chat Service] Model (${modelName}) successfully generated response.`);
+        return chatResponse.trim();
+      }
+    } catch (error) {
+      lastError = error;
+      const errMessage = error.response?.data?.error?.message || error.message;
+      const status = error.response?.status;
+      console.warn(`[Chat Service] Model ${modelName} returned status ${status}: ${errMessage}. Rotating to next fallback model...`);
     }
-  } catch (error) {
-    const errorDetails = error.response?.data?.error?.message || error.message;
-    console.error('[Chat Service] Error during content generation:', errorDetails);
-    throw new Error(errorDetails);
   }
+
+  const finalMessage = lastError?.response?.data?.error?.message || lastError?.message || 'All Gemini model fallbacks exhausted.';
+  console.error('[Chat Service] All models failed:', finalMessage);
+  throw new Error(finalMessage);
 }
+
 
 module.exports = {
   generateUniversalResponse

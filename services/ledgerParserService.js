@@ -1,7 +1,83 @@
-const axios = require('axios');
+const FALLBACK_MODELS = [
+  'gemini-2.5-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-3.7-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-lite-latest'
+];
 
-// Endpoint for Gemini 2.5 Flash Lite Content Generation API
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+/**
+ * Sends transcribed Odia text to Gemini to parse and extract financial variables.
+ * Uses multi-model fallback to bypass quota errors on individual models.
+ * 
+ * @param {string} odiaText - Raw transcribed Odia script.
+ * @returns {Promise<Object>} - Extracted transaction details in JSON.
+ */
+async function analyzeTransaction(odiaText) {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  if (!geminiApiKey || geminiApiKey === 'your_gemini_api_key_here') {
+    throw new Error('Gemini API Key is not configured in .env');
+  }
+
+  console.log(`[Ledger Parser] Analyzing text: "${odiaText}"`);
+
+  // Prepare API call payload
+  const payload = {
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: `Please parse this Odia financial transaction: "${odiaText}"`
+          }
+        ]
+      }
+    ],
+    systemInstruction: {
+      parts: [
+        {
+          text: SYSTEM_INSTRUCTION
+        }
+      ]
+    },
+    generationConfig: {
+      responseMimeType: 'application/json', // Force response to be strict JSON
+      temperature: 0.1 // Low temperature for high precision and factual extraction
+    }
+  };
+
+  let lastError;
+
+  for (const modelName of FALLBACK_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
+    try {
+      console.log(`[Ledger Parser] Attempting parsing with model: ${modelName}...`);
+      const response = await axios.post(url, payload, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000
+      });
+
+      if (response && response.data && response.data.candidates && response.data.candidates.length > 0) {
+        const parsedText = response.data.candidates[0].content.parts[0].text;
+        console.log(`[Ledger Parser] (${modelName}) Raw output: ${parsedText.trim()}`);
+        const transactionData = JSON.parse(parsedText.trim());
+        console.log('[Ledger Parser] Successfully parsed JSON:', transactionData);
+        return transactionData;
+      }
+    } catch (error) {
+      lastError = error;
+      const errMessage = error.response?.data?.error?.message || error.message;
+      const status = error.response?.status;
+      console.warn(`[Ledger Parser] Model ${modelName} returned status ${status}: ${errMessage}. Rotating...`);
+    }
+  }
+
+  const finalMessage = lastError?.response?.data?.error?.message || lastError?.message || 'All models exhausted.';
+  console.error('[Ledger Parser] Error during transaction analysis:', finalMessage);
+  throw new Error(`Ledger Parser Error: ${finalMessage}`);
+}
+
 
 /**
  * System instruction defining the role, extraction variables, and few-shot examples

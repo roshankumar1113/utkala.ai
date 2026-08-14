@@ -3,11 +3,13 @@ node_modules/
 
 # Local env files (highly critical to protect API keys!)
 .env
+**/.env
 .env*.local
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+
 
 # Server temporary outputs / confirmation audio files
 public/outputs/

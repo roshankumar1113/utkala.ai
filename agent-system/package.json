@@ -1,0 +1,30 @@
+{
+  "name": "utkala-agent-system",
+  "version": "1.0.0",
+  "description": "Multi-agent automation system for Utkal.ai",
+  "main": "webhook-receiver.js",
+  "scripts": {
+    "start": "node webhook-receiver.js",
+    "dev": "nodemon webhook-receiver.js",
+    "test": "jest",
+    "agent:test": "node agents/test-agent.js",
+    "agent:bug": "node agents/bug-detector-agent.js",
+    "agent:feature": "node agents/feature-developer-agent.js",
+    "agent:deploy": "node agents/deployment-agent.js",
+    "agent:monitor": "node agents/monitoring-agent.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "bull": "^4.11.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.19.2",
+    "pg": "^8.11.3",
+    "redis": "^4.6.12",
+    "jest": "^29.7.0",
+    "@octokit/rest": "^20.0.0",
+    "@anthropic-ai/sdk": "^0.8.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

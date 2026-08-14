@@ -37,6 +37,15 @@ app.get('/', (req, res) => {
   });
 });
 
+// Dedicated Health Check Endpoint for Docker & Monitoring
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  });
+});
+
+
 // API Routes
 app.use('/api', voiceLedgerRoutes); // Mount /api/process-voice voice ledger routing endpoint
 app.post('/api/query-rag', aiController.handleUtkalQuery); // Mount local RAG query semantic endpoint
