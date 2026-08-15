@@ -2,12 +2,12 @@ const axios = require('axios');
 
 // Supported active Gemini models ordered by speed and preference
 const FALLBACK_MODELS = [
+  'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
   'gemini-3.5-flash-lite',
   'gemini-3.6-flash',
   'gemini-3.7-flash',
-  'gemini-3.1-flash-lite',
-  'gemini-flash-lite-latest'
+  'gemini-3.1-flash-lite'
 ];
 
 const CHAT_SYSTEM_PROMPT = `You are Utkal.ai, a completely free, open-domain, universal AI assistant built for the people of Odisha. Your primary purpose is to make all human knowledge completely accessible to anyone who speaks Odia, acting as an unrestricted regional Gemini oracle.

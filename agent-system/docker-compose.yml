@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # Main Utkal.ai App
   app:
