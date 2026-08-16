@@ -1,0 +1,9 @@
+fastapi>=0.109.0
+uvicorn>=0.27.0
+sentence-transformers>=2.2.2
+psycopg2-binary>=2.9.9
+pgvector>=0.2.4
+pypdf>=4.0.1
+beautifulsoup4>=4.12.3
+requests>=2.31.0
+pydantic>=2.6.0
