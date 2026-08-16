@@ -85,6 +85,49 @@ app.get('/github', (req, res) => {
 app.use('/api', voiceLedgerRoutes); // Mount /api/process-voice voice ledger routing endpoint
 app.post('/api/query-rag', aiController.handleUtkalQuery); // Mount local RAG query semantic endpoint
 
+// Scraped Odia Dataset Stats Endpoint
+app.get('/api/odia-data/stats', async (req, res) => {
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'scraped_odia_data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const dataset = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      const categories = [...new Set(dataset.map(item => item.category))];
+      return res.status(200).json({
+        status: 'ok',
+        totalRecords: dataset.length,
+        categories: categories,
+        datasetPath: 'data/scraped_odia_data.json',
+        timestamp: new Date().toISOString()
+      });
+    }
+    return res.status(200).json({
+      status: 'ok',
+      totalRecords: 0,
+      categories: [],
+      message: 'No scraped dataset found yet.'
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
+});
+
+// GET Scraped Odia Data
+app.get('/api/odia-data', (req, res) => {
+  try {
+    const dataFilePath = path.join(__dirname, 'data', 'scraped_odia_data.json');
+    if (fs.existsSync(dataFilePath)) {
+      const dataset = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+      return res.status(200).json({ status: 'ok', count: dataset.length, data: dataset });
+    }
+    return res.status(404).json({ status: 'error', message: 'Dataset not found' });
+  } catch (error) {
+    return res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 // Single Unified Text Chat POST Endpoint
 async function handleChat(req, res) {
   const userMessage = req.body.message;
