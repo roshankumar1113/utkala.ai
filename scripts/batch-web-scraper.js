@@ -10,13 +10,22 @@ const TARGET_URLS = [
   'https://en.wikipedia.org/wiki/Puri',
   'https://en.wikipedia.org/wiki/Cuttack',
   'https://en.wikipedia.org/wiki/Konark_Sun_Temple',
-  'https://en.wikipedia.org/wiki/Jagannath_Temple,_Puri'
+  'https://en.wikipedia.org/wiki/Jagannath_Temple,_Puri',
+  'https://odisha.gov.in/or/odisha-profile/odia-classics/sarala-mahabharata/odia-classic-data',
+  'https://odisha.gov.in/or/odisha-profile/eminent-personalities',
+  'https://investodisha.gov.in/',
+  'https://rocinindia.blogspot.com/2013/12/roc-at-cuttack-orissa.html',
+  'https://odisha.gov.in/or/odisha-profile/eminent-personalities/bakasai-jagabanadhau',
+  'https://odisha.gov.in/or/taxonomy/term/148',
+  'https://odisha.gov.in/or/explore-odisha/maelaa-o-parabaparabaanai',
+  'https://odisha.gov.in/or/odisha-tourism/patata-caitara',
+  'https://odisha.gov.in/or/odisha-tourism/gaurautatawapauuranana-parayayatana-sathalai-bhaubanaesawara'
 ];
 
 async function runBatchScrapeAndImport() {
   console.log('🚀 Starting Batch Web Scraper for RAG Knowledge Base...');
 
-  const scraper = new WebScraper({ timeoutMs: 12000 });
+  const scraper = new WebScraper({ timeoutMs: 15000 });
   const scrapedPages = await scraper.scrapeBatch(TARGET_URLS);
 
   if (scrapedPages.length === 0) {
@@ -54,7 +63,7 @@ async function runBatchScrapeAndImport() {
   await fs.writeJson(DATA_FILE, dataset, { spaces: 2 });
 
   console.log(`✅ Batch Web Scrape Complete!`);
-  console.log(`📊 Added ${addedCount} new web pages to RAG Knowledge Base.`);
+  console.log(`📊 Added/Updated ${addedCount} web pages in RAG Knowledge Base.`);
   console.log(`📁 Total Dataset Size: ${dataset.length} records in ${DATA_FILE}`);
 }
 
