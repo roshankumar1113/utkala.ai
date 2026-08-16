@@ -45,6 +45,17 @@ app.get('/health', (req, res) => {
   });
 });
 
+// GitHub Webhook Endpoints
+app.post('/github', (req, res) => {
+  console.log('GitHub webhook received!');
+  res.json({ status: 'ok', message: 'Webhook received' });
+});
+
+app.get('/github', (req, res) => {
+  res.json({ status: 'ok', message: 'Webhook endpoint ready' });
+});
+
+
 
 // API Routes
 app.use('/api', voiceLedgerRoutes); // Mount /api/process-voice voice ledger routing endpoint
