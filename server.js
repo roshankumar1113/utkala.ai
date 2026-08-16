@@ -128,6 +128,146 @@ app.get('/api/odia-data', (req, res) => {
   }
 });
 
+// Configure Multer for PDF uploads to ./pdfs
+const multer = require('multer');
+const PDFExtractor = require('./services/pdfExtractorService');
+const pdfsUploadDir = path.join(__dirname, 'pdfs');
+if (!fs.existsSync(pdfsUploadDir)) {
+  fs.mkdirSync(pdfsUploadDir, { recursive: true });
+}
+const pdfStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, pdfsUploadDir),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+});
+const uploadPdf = multer({
+  storage: pdfStorage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are supported!'), false);
+    }
+  }
+});
+
+// PDF Upload & Automatic RAG Knowledge Ingestion Endpoint
+app.post('/api/upload-pdf', uploadPdf.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No PDF file uploaded.' });
+    }
+
+    const extractor = new PDFExtractor();
+    const result = await extractor.extractFromPDF(req.file.path);
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: result.error });
+    }
+
+    // Append extracted PDF text to local dataset (scraped_odia_data.json)
+    const dataFilePath = path.join(__dirname, 'data', 'scraped_odia_data.json');
+    let dataset = [];
+    if (fs.existsSync(dataFilePath)) {
+      dataset = JSON.parse(fs.readFileSync(dataFilePath, 'utf8'));
+    }
+
+    const newRecord = {
+      title: result.metadata.title || result.filename,
+      category: 'Uploaded PDF Document',
+      content: result.text,
+      source_url: `file://pdfs/${result.filename}`,
+      language: result.metadata.language || 'odia',
+      pages: result.pages
+    };
+
+    dataset.push(newRecord);
+    fs.mkdirSync(path.dirname(dataFilePath), { recursive: true });
+    fs.writeFileSync(dataFilePath, JSON.stringify(dataset, null, 2), 'utf8');
+
+    return res.status(200).json({
+      success: true,
+      message: `PDF "${result.filename}" uploaded and processed into RAG Knowledge Base!`,
+      data: {
+        filename: result.filename,
+        pages: result.pages,
+        characterCount: result.text.length,
+        metadata: result.metadata,
+        totalDatasetRecords: dataset.length
+      }
+    });
+
+  } catch (error) {
+    console.error('[PDF Upload Error]:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ============================================
+// ENDPOINTS: STEP 7 RAG PIPELINE INTEGRATION
+// ============================================
+
+const RAGPipeline = require('./services/ragPipelineService');
+const VectorStore = require('./services/vectorStoreService');
+
+// 1. POST /api/rag/train - Run full RAG pipeline training
+app.post('/api/rag/train', async (req, res) => {
+  try {
+    const pipeline = new RAGPipeline();
+    const config = req.body || {};
+    const result = await pipeline.run(config);
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'RAG Pipeline training and vector store indexing completed successfully.',
+      statistics: result.stats,
+      chunksProcessed: result.chunksProcessed
+    });
+  } catch (error) {
+    console.error('[RAG Train Error]:', error);
+    return res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// 2. POST /api/rag/search - Perform Cosine Vector Similarity Search
+app.post('/api/rag/search', async (req, res) => {
+  try {
+    const { query, topK } = req.body;
+    if (!query || query.trim() === '') {
+      return res.status(400).json({ status: 'error', message: 'Query string is required.' });
+    }
+
+    const pipeline = new RAGPipeline();
+    const result = await pipeline.query(query, topK || 5);
+
+    return res.status(200).json({
+      status: 'success',
+      query: result.query,
+      resultsCount: result.resultsCount,
+      results: result.results
+    });
+  } catch (error) {
+    console.error('[RAG Search Error]:', error);
+    return res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// 3. GET /api/rag/stats - Retrieve Vector DB Statistics
+app.get('/api/rag/stats', async (req, res) => {
+  try {
+    const vectorStore = new VectorStore();
+    await vectorStore.connect();
+    const stats = await vectorStore.getStats();
+
+    return res.status(200).json({
+      status: 'success',
+      statistics: stats
+    });
+  } catch (error) {
+    console.error('[RAG Stats Error]:', error);
+    return res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 // Single Unified Text Chat POST Endpoint
 async function handleChat(req, res) {
   const userMessage = req.body.message;
