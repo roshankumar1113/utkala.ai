@@ -30,3 +30,10 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.env
+

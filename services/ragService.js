@@ -1,76 +1,104 @@
 /**
- * Knowledge Base containing highly detailed, verified structural documents 
- * regarding local farming cycles and Odisha State Welfare guidelines.
+ * ragService.js
+ * Simple in-memory keyword-based RAG context retrieval.
+ * Reads from scraped_odia_data.json and vector_store_fallback.json.
  */
-const KNOWLEDGE_BASE = [
-  {
-    id: "subhadra_yojana_2026",
-    category: "Schemes",
-    title: "Subhadra Yojana Eligibility and Guidelines",
-    content: `Subhadra Yojana provides financial assistance to women in Odisha. 
-              Eligibility Checklist: The applicant must be a resident of Odisha, aged between 21 and 60 years. 
-              Exclusions: Women in government jobs or income tax payers are not eligible.
-              Required Documents: Aadhaar Card linked to a mobile number, single bank account with DBT enabled, and a resident certificate.`
-  },
-  {
-    id: "kalia_yojana_agri",
-    category: "Farming",
-    title: "KALIA Yojana Financial Assistance for Farmers",
-    content: `Krushak Assistance for Livelihood and Income Augmentation (KALIA) scheme supports small farmers and landless agricultural laborers.
-              Small and marginal farmers receive Rs. 25,000 over five seasons. 
-              Landless households receive Rs. 12,500 for allied agricultural activities like goat rearing or poultry.`
-  },
-  {
-    id: "paddy_mandi_cycle",
-    category: "Farming",
-    title: "Odisha Paddy Procurement and Mandi Timings",
-    content: `Kharif paddy procurement across Odisha mandis begins systematically in November and continues through March. 
-              Farmers must register on the Food Odisha portal. Token generation happens 12 days prior to the slot sale.`
-  }
-];
+
+const fs = require('fs');
+const path = require('path');
+
+const DATA_FILE = path.join(__dirname, '..', 'data', 'scraped_odia_data.json');
+const VECTOR_FALLBACK = path.join(__dirname, '..', 'data', 'vector_store_fallback.json');
+
+const NO_MATCH_MSG =
+  'No explicit matching local state schema documents found in the primary vector cluster repository.';
 
 /**
- * Searches the knowledge base using structural text matching
- * @param {string} query - The incoming user text input or voice transcription
- * @returns {string} - The extracted context block
+ * Load the local knowledge base (scraped data + vector fallback).
+ * @returns {Array} - Combined array of knowledge records
  */
-function retrieveContext(query) {
-  if (!query) return "No query provided.";
-  const normalizedQuery = query.toLowerCase();
-  let matchedContexts = [];
+function loadKnowledgeBase() {
+  const records = [];
 
-  // Semantic keyword mapping loop to pull relevant blocks (including resilient native Odia keywords)
-  KNOWLEDGE_BASE.forEach((doc) => {
-    if (
-      normalizedQuery.includes("subhadra") || 
-      normalizedQuery.includes("ସୁଭଦ୍ରା") ||
-      normalizedQuery.includes("ଯୋଜନା") ||
-      normalizedQuery.includes("yojana") ||
-      normalizedQuery.includes("kalia") ||
-      normalizedQuery.includes("କାଳିଆ") ||
-      normalizedQuery.includes("procurement") ||
-      normalizedQuery.includes("mandi") ||
-      normalizedQuery.includes("ମାଣ୍ଡି") ||
-      normalizedQuery.includes("ଧାନ") ||
-      normalizedQuery.includes(doc.category.toLowerCase()) ||
-      doc.content.toLowerCase().split(/\s+/).some(word => {
-        const cleaned = word.replace(/[^a-zA-Z]/g, "");
-        return cleaned.length > 4 && normalizedQuery.includes(cleaned);
-      })
-    ) {
-      matchedContexts.push(`[Source: ${doc.title}]\n${doc.content}`);
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      records.push(...data);
     }
-  });
-
-  // Default fallback if no explicitly matched scheme records are found
-  if (matchedContexts.length === 0) {
-    return "No explicit matching local state schema documents found in the primary vector cluster repository.";
+  } catch (err) {
+    console.warn('[RAGService] Could not load scraped_odia_data.json:', err.message);
   }
 
-  return matchedContexts.join("\n\n--- \n\n");
+  try {
+    if (fs.existsSync(VECTOR_FALLBACK)) {
+      const vData = JSON.parse(fs.readFileSync(VECTOR_FALLBACK, 'utf8'));
+      // Vector store items have a "text" field, map to content
+      const mapped = vData.map(item => ({
+        title: item.metadata?.title || 'Vector Chunk',
+        category: item.metadata?.source || 'Vector Store',
+        content: item.text || '',
+        source_url: item.metadata?.source_url || '',
+        language: item.metadata?.language || 'odia',
+      }));
+      records.push(...mapped);
+    }
+  } catch (err) {
+    console.warn('[RAGService] Could not load vector_store_fallback.json:', err.message);
+  }
+
+  return records;
+}
+
+/**
+ * Simple keyword-based context retrieval.
+ * Scores records by how many query words appear in title + content.
+ * Returns the top 3 most relevant passages concatenated.
+ *
+ * @param {string} query - User query string
+ * @returns {string} - Relevant context text or NO_MATCH_MSG
+ */
+function retrieveContext(query) {
+  if (!query || typeof query !== 'string') return NO_MATCH_MSG;
+
+  const records = loadKnowledgeBase();
+  if (!records.length) return NO_MATCH_MSG;
+
+  // Tokenise query (lowercase, split on spaces and Odia word separators)
+  const queryWords = query
+    .toLowerCase()
+    .split(/[\s,।.\-!?]+/)
+    .filter(w => w.length > 1);
+
+  if (!queryWords.length) return NO_MATCH_MSG;
+
+  // Score each record
+  const scored = records.map(rec => {
+    const haystack = `${rec.title || ''} ${rec.content || ''}`.toLowerCase();
+    let score = 0;
+    for (const word of queryWords) {
+      if (haystack.includes(word)) score++;
+    }
+    return { rec, score };
+  });
+
+  // Filter to records with at least 1 match, take top 3
+  const topMatches = scored
+    .filter(s => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(s => s.rec);
+
+  if (!topMatches.length) return NO_MATCH_MSG;
+
+  // Concatenate context blocks
+  const contextBlocks = topMatches.map(
+    (rec, i) =>
+      `[Context Block ${i + 1}]\nTitle: ${rec.title}\nCategory: ${rec.category}\n${rec.content}`
+  );
+
+  return contextBlocks.join('\n\n---\n\n');
 }
 
 module.exports = {
-  KNOWLEDGE_BASE,
-  retrieveContext
+  retrieveContext,
 };

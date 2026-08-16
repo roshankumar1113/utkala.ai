@@ -1,5 +1,15 @@
+"""
+pdf_extractor.py
+Extract text and metadata from single PDFs or entire directories.
+"""
+
 import os
+import logging
+from pathlib import Path
 from typing import Dict, Any, List
+
+logger = logging.getLogger(__name__)
+
 try:
     from pypdf import PdfReader
 except ImportError:
@@ -7,105 +17,97 @@ except ImportError:
         from PyPDF2 import PdfReader
     except ImportError:
         PdfReader = None
+        logger.warning("pypdf not installed — PDF extraction unavailable.")
 
 
 class PDFExtractor:
-    """
-    PDFExtractor Class in Python for RAG Systems.
-    Extracts structured text, metadata, and page count from single or batch PDF files.
-    """
-    def __init__(self, max_character_length: int = 500000, default_language: str = "Odia"):
-        self.max_character_length = max_character_length
+    """Extract structured text and metadata from PDF files."""
+
+    def __init__(self, max_chars: int = 500_000, default_language: str = "Odia"):
+        self.max_chars = max_chars
         self.default_language = default_language
 
-    def extract_from_pdf(self, pdf_path: str) -> Dict[str, Any]:
-        filename = os.path.basename(pdf_path)
-        print(f'📄 [Python PDFExtractor] Extracting: "{filename}"...')
+    # ── single file ───────────────────────────────────────────────────────────
+    def extract_from_pdf(self, file_path: str) -> Dict[str, Any]:
+        path = Path(file_path)
+        filename = path.name
+        logger.info(f'📄 Extracting: "{filename}"')
 
-        if not os.path.exists(pdf_path):
-            error_msg = f'File not found at path: "{pdf_path}"'
-            print(f'❌ [Python PDFExtractor] {error_msg}')
-            return {
-                "success": False,
-                "filename": filename,
-                "error": error_msg
-            }
+        if not path.exists():
+            logger.error(f'File not found: "{file_path}"')
+            return {"success": False, "filename": filename, "error": f"File not found: {file_path}"}
+
+        if PdfReader is None:
+            logger.error("pypdf not installed")
+            return {"success": False, "filename": filename, "error": "pypdf not installed"}
 
         try:
-            if PdfReader is None:
-                # Basic text fallback if pypdf is not installed
-                with open(pdf_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    extracted_text = f.read()
-                numpages = 1
-                title = os.path.splitext(filename)[0]
-                author = "Unknown"
-            else:
-                reader = PdfReader(pdf_path)
-                numpages = len(reader.pages)
-                page_texts = [page.extract_text() or '' for page in reader.pages]
-                extracted_text = "\n\n".join(page_texts).strip()
+            reader = PdfReader(str(path))
+            num_pages = len(reader.pages)
 
-                meta = reader.metadata or {}
-                title = meta.get('/Title', os.path.splitext(filename)[0]) or os.path.splitext(filename)[0]
-                author = meta.get('/Author', 'Sarala Dasa') or 'Sarala Dasa'
+            page_texts = []
+            for i, page in enumerate(reader.pages):
+                try:
+                    page_texts.append(page.extract_text() or "")
+                except Exception as exc:
+                    logger.warning(f"  Page {i} extraction failed: {exc}")
 
-            is_truncated = False
-            if len(extracted_text) > self.max_character_length:
-                extracted_text = (
-                    extracted_text[:self.max_character_length] +
-                    "\n\n[TRUNCATED: Exceeded maximum character limit]"
-                )
-                is_truncated = True
-                print(f'⚠️ [Python PDFExtractor] "{filename}" text exceeded limit. Truncated to {self.max_character_length} chars.')
+            text = "\n\n".join(page_texts).strip()
 
-            metadata = {
-                "title": str(title).strip(),
-                "author": str(author).strip(),
-                "source": "PDF",
-                "language": self.default_language
-            }
+            # Truncate if needed
+            truncated = False
+            if len(text) > self.max_chars:
+                text = text[: self.max_chars] + "\n\n[TRUNCATED]"
+                truncated = True
+                logger.warning(f'"{filename}" truncated to {self.max_chars} chars.')
 
-            print(f'✅ [Python PDFExtractor] Successfully extracted "{filename}" ({numpages} pages, {len(extracted_text)} chars)')
+            # Metadata from PDF info dict
+            info = reader.metadata or {}
+            title = (info.get("/Title") or path.stem).strip()
+            author = (info.get("/Author") or "Unknown").strip()
 
+            logger.info(f'✅ "{filename}" — {num_pages} pages, {len(text)} chars')
             return {
                 "success": True,
                 "filename": filename,
-                "pages": numpages,
-                "text": extracted_text,
-                "metadata": metadata,
-                "isTruncated": is_truncated
+                "pages": num_pages,
+                "text": text,
+                "isTruncated": truncated,
+                "metadata": {
+                    "title": title,
+                    "author": author,
+                    "source": "PDF",
+                    "language": self.default_language,
+                    "path": str(path),
+                    "pages": num_pages,
+                },
             }
 
-        except Exception as error:
-            print(f'❌ [Python PDFExtractor] Failed to parse PDF "{filename}": {error}')
-            return {
-                "success": False,
-                "filename": filename,
-                "error": f"Invalid or unparseable PDF: {error}"
-            }
+        except Exception as exc:
+            logger.error(f'❌ Failed to parse "{filename}": {exc}')
+            return {"success": False, "filename": filename, "error": str(exc)}
 
+    # ── batch ──────────────────────────────────────────────────────────────────
     def extract_batch_pdfs(self, pdf_directory: str) -> List[Dict[str, Any]]:
-        print(f'📂 [Python PDFExtractor] Starting batch extraction for directory: "{pdf_directory}"...')
+        directory = Path(pdf_directory)
+        logger.info(f'📂 Batch extracting from "{directory}"')
 
-        if not os.path.exists(pdf_directory):
-            print(f'❌ [Python PDFExtractor] Directory not found: "{pdf_directory}"')
+        if not directory.exists():
+            logger.error(f'Directory not found: "{directory}"')
             return []
 
-        pdf_files = [f for f in os.listdir(pdf_directory) if f.lower().endswith('.pdf')]
-
+        pdf_files = sorted(directory.glob("*.pdf"))
         if not pdf_files:
-            print(f'⚠️ [Python PDFExtractor] No PDF files found in directory "{pdf_directory}".')
+            logger.info("No PDF files found.")
             return []
 
-        print(f'🔍 [Python PDFExtractor] Found {len(pdf_files)} PDF files to process.')
-
+        logger.info(f"Found {len(pdf_files)} PDF(s).")
         results = []
-        for i, pdf_file in enumerate(pdf_files):
-            full_path = os.path.join(pdf_directory, pdf_file)
-            print(f'[Batch Progress {i + 1}/{len(pdf_files)}] Processing: {pdf_file}')
-            result = self.extract_from_pdf(full_path)
+        for i, pdf_path in enumerate(pdf_files):
+            logger.info(f"[{i + 1}/{len(pdf_files)}] {pdf_path.name}")
+            result = self.extract_from_pdf(str(pdf_path))
             if result.get("success"):
                 results.append(result)
 
-        print(f'🎉 [Python PDFExtractor] Batch extraction complete. Processed {len(results)}/{len(pdf_files)} PDFs.')
+        logger.info(f"✅ Batch done: {len(results)}/{len(pdf_files)} extracted.")
         return results

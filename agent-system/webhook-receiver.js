@@ -1,16 +1,59 @@
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+
 const express = require('express');
 const { Octokit } = require('@octokit/rest');
-const Queue = require('bull');
-const crypto = require('crypto');
-const config = require('./config');
+const crypto  = require('crypto');
+const config  = require('./config');
 
-const app = express();
+const app    = express();
 const github = new Octokit({ auth: config.GITHUB_TOKEN });
-const eventQueue = new Queue('github-events', config.REDIS_URL);
+
+// ── Queue setup with graceful Redis fallback ───────────────────────────────────
+let eventQueue = null;
+
+function setupQueue() {
+  const redisUrl = config.REDIS_URL || '';
+
+  // Don't try to connect to Docker-internal hostnames from localhost
+  const isDockerHost = redisUrl.includes('redis:6379') ||
+                       redisUrl.includes('@db:') ||
+                       redisUrl.includes('@redis:');
+
+  if (!redisUrl || isDockerHost) {
+    console.warn('⚠️  Redis URL is a Docker hostname — queue disabled. Events will be processed inline.');
+    return null;
+  }
+
+  try {
+    const Queue = require('bull');
+    const q = new Queue('github-events', redisUrl);
+    q.on('error', (err) => {
+      console.error('Queue error (Redis may be unavailable):', err.message);
+    });
+    console.log(`✅ Bull queue connected: ${redisUrl}`);
+    return q;
+  } catch (err) {
+    console.warn('⚠️  Bull queue setup failed:', err.message);
+    return null;
+  }
+}
+
+eventQueue = setupQueue();
+
+// ── in-memory fallback queue when Redis is unavailable ──────────────────────────
+const inMemoryQueue = [];
+async function enqueue(job) {
+  if (eventQueue) {
+    return eventQueue.add(job, { priority: job.priority || 1, removeOnComplete: true });
+  }
+  // Fallback: just log + store in memory
+  inMemoryQueue.push({ ...job, enqueuedAt: new Date().toISOString() });
+  console.log(`📋 [InMemQueue] Stored event: ${job.type} (queue size: ${inMemoryQueue.length})`);
+}
 
 app.use(express.json());
 
-// Middleware: Verify GitHub signature
+// ── GitHub signature verification ─────────────────────────────────────────────
 const verifyGithubSignature = (req, res, next) => {
   const signature = req.headers['x-hub-signature-256'];
   if (!signature) return res.status(401).send('No signature');
@@ -20,70 +63,65 @@ const verifyGithubSignature = (req, res, next) => {
     .update(JSON.stringify(req.body))
     .digest('hex');
 
-  const expected = `sha256=${hash}`;
-
-  if (signature !== expected) {
+  if (signature !== `sha256=${hash}`) {
     return res.status(401).send('Invalid signature');
   }
-
   next();
 };
 
-// Apply signature verification if GITHUB_WEBHOOK_SECRET is set
 if (config.GITHUB_WEBHOOK_SECRET) {
   app.use('/github', verifyGithubSignature);
 }
 
-// Webhook handler
+// ── Webhook handler ────────────────────────────────────────────────────────────
 app.post('/github', async (req, res) => {
-  const event = req.headers['x-github-event'];
+  const event   = req.headers['x-github-event'];
   const payload = req.body;
 
-  console.log(`📥 Received GitHub event: ${event}`);
+  console.log(`📥 GitHub event: ${event} | action: ${payload.action || 'N/A'}`);
 
   try {
-    // Route events to appropriate agents
     switch (event) {
       case 'pull_request':
-        await eventQueue.add(
-          { type: 'pr_opened', payload },
-          { priority: 1, removeOnComplete: true }
-        );
+        await enqueue({ type: 'pr_opened', payload, priority: 1 });
         break;
 
       case 'issues':
-        if (payload.action === 'opened' && payload.issue.labels.some(l => l.name === 'agent-develop')) {
-          await eventQueue.add(
-            { type: 'issue_for_development', payload },
-            { priority: 2, removeOnComplete: true }
-          );
+        if (payload.action === 'opened' &&
+            payload.issue?.labels?.some(l => l.name === 'agent-develop')) {
+          await enqueue({ type: 'issue_for_development', payload, priority: 2 });
         }
         break;
 
       case 'push':
-        await eventQueue.add(
-          { type: 'push_to_main', payload },
-          { priority: 1, removeOnComplete: true }
-        );
+        await enqueue({ type: 'push_to_main', payload, priority: 1 });
         break;
 
       default:
-        console.log(`⏭️ Event ${event} not handled`);
+        console.log(`⏭️ Event "${event}" not handled`);
     }
 
-    res.status(200).send('✅ Event queued');
+    res.status(200).json({ status: 'ok', event, queued: !!eventQueue });
   } catch (error) {
-    console.error('❌ Webhook error:', error);
-    res.status(500).send('Error processing webhook');
+    console.error('❌ Webhook handler error:', error.message);
+    res.status(500).json({ status: 'error', message: error.message });
   }
 });
 
-// Health check
+// ── Health check ───────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date() });
+  res.json({
+    status:    'ok',
+    timestamp: new Date().toISOString(),
+    queue:     eventQueue ? 'redis' : 'in-memory',
+    queueSize: inMemoryQueue.length,
+  });
 });
 
-app.listen(config.PORT, () => {
-  console.log(`🪝 Webhook receiver listening on port ${config.PORT}`);
-  console.log(`📌 Add this URL to GitHub settings: http://your-server:${config.PORT}/github`);
+// ── Start ──────────────────────────────────────────────────────────────────────
+const PORT = config.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🪝 Webhook receiver running on port ${PORT}`);
+  console.log(`   Queue backend : ${eventQueue ? 'Redis' : 'In-memory (Redis unavailable)'}`);
+  console.log(`   Add to GitHub : Settings → Webhooks → http://your-server:${PORT}/github`);
 });
