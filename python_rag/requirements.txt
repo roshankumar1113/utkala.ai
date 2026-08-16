@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────────
+# Utkal.ai Python RAG — requirements (Python 3.15, Windows, no MSVC)
+# ─────────────────────────────────────────────────────────────────
+
+# Web framework
+fastapi==0.109.0
+uvicorn==0.27.1
+pydantic>=1.10,<2
+python-multipart==0.0.9
+
+# HTTP (pure-Python, no C extensions)
+requests==2.31.0
+# aiohttp requires MSVC on Python 3.15 — use requests instead
+
+# PDF
+pypdf==4.2.0
+
+# Web scraping (beautifulsoup4 is pure-Python; lxml needs MSVC — use html.parser)
+beautifulsoup4==4.12.3
+# lxml — needs MSVC on Python 3.15; omitted
+
+# ORM (pure-Python wheels available)
+sqlalchemy>=2.0,<3
+
+# Logging & config
+python-json-logger==2.0.7
+python-dotenv==1.0.0
+
+# Testing
+pytest>=7.4
+httpx>=0.25
+
+# Utilities
+cachetools>=5.3
+tenacity>=8.2
+
+# ── OPTIONAL (require either MSVC or torch) ───────────────────────
+# psycopg2-binary   — needs MSVC on Python 3.15; DB falls back to JSON
+# sentence-transformers — needs torch; not yet on Python 3.15
+# lxml              — needs MSVC; html.parser used instead
+# aiohttp           — needs MSVC; requests used instead
+# pgvector          — needs psycopg2; omitted

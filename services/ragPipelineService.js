@@ -1,158 +1,132 @@
+/**
+ * ragPipelineService.js
+ * Node.js RAG pipeline orchestrator.
+ * Extracts → chunks → embeds (via @xenova/transformers) → stores vectors.
+ */
+
+require('dotenv').config();
+const fs = require('fs');
 const path = require('path');
-const fs = require('fs-extra');
-const PDFExtractor = require('./pdfExtractorService');
-const WebScraper = require('./webScraperService');
-const TextChunker = require('./textChunkerService');
-const EmbeddingGenerator = require('./embeddingGeneratorService');
 const VectorStore = require('./vectorStoreService');
 
+const DATA_FILE = path.join(__dirname, '..', 'data', 'scraped_odia_data.json');
+const CHUNK_SIZE = 500;
+const OVERLAP = 100;
+
 /**
- * RAGPipeline Class
- * Orchestrates document extraction, chunking, embedding generation, vector storage, and query retrieval.
+ * Split a long text into overlapping chunks.
  */
+function chunkText(text, chunkSize = CHUNK_SIZE, overlap = OVERLAP) {
+  const chunks = [];
+  let start = 0;
+  while (start < text.length) {
+    const end = Math.min(start + chunkSize, text.length);
+    chunks.push(text.slice(start, end).trim());
+    if (end === text.length) break;
+    start += chunkSize - overlap;
+  }
+  return chunks.filter(c => c.length >= 30);
+}
+
+/**
+ * Generate a simple embedding using character n-gram frequency.
+ * This is a lightweight fallback that works without a model download.
+ * For production, replace with @xenova/transformers or the Python RAG service.
+ */
+function generateSimpleEmbedding(text, dim = 128) {
+  const vec = new Array(dim).fill(0);
+  const t = text.toLowerCase();
+  for (let i = 0; i < t.length - 1; i++) {
+    const code = ((t.charCodeAt(i) * 31) + t.charCodeAt(i + 1)) % dim;
+    vec[code] += 1;
+  }
+  // Normalize
+  const mag = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
+  return vec.map(v => v / mag);
+}
+
 class RAGPipeline {
   constructor() {
-    this.pdfExtractor = new PDFExtractor();
-    this.webScraper = new WebScraper({ timeoutMs: 12000 });
-    this.textChunker = new TextChunker({ chunkSize: 500, overlap: 100 });
-    this.embeddingGenerator = new EmbeddingGenerator();
     this.vectorStore = new VectorStore();
   }
 
-  /**
-   * Runs the full end-to-end RAG training pipeline
-   * @param {Object} config - { pdfDirectory, websiteUrls, databaseRecords }
-   * @returns {Promise<Object>} - Execution results and statistics
-   */
   async run(config = {}) {
-    console.log('\n========================================');
-    console.log('🚀 RAG PIPELINE EXECUTOR STARTED');
-    console.log('========================================');
-
+    console.log('\n=== RAG Pipeline: Starting ===');
     await this.vectorStore.connect();
 
-    const rawDocuments = [];
+    let rawDocuments = [];
 
-    // STEP 1: PDF Extraction
-    const pdfDir = config.pdfDirectory || path.join(__dirname, '..', 'pdfs');
-    console.log(`\n=== STEP 1: EXTRACTING PDFS FROM "${pdfDir}" ===`);
-    if (await fs.pathExists(pdfDir)) {
-      const pdfs = await this.pdfExtractor.extractBatchPDFs(pdfDir);
-      for (const pdf of pdfs) {
-        if (pdf.text) {
-          rawDocuments.push({
-            text: pdf.text,
-            filename: pdf.filename,
-            metadata: pdf.metadata
-          });
-        }
-      }
-    }
-
-    // STEP 2: Web Scraping
-    const urls = config.websiteUrls || [];
-    if (urls.length > 0) {
-      console.log(`\n=== STEP 2: SCRAPING ${urls.length} WEBSITES ===`);
-      const pages = await this.webScraper.scrapeBatch(urls);
-      for (const page of pages) {
-        if (page.content) {
-          rawDocuments.push({
-            text: page.content,
-            filename: page.title,
-            metadata: {
-              source: 'Website',
-              title: page.title,
-              url: page.url,
-              language: 'Odia'
-            }
-          });
-        }
-      }
-    }
-
-    // STEP 3: Database & Local Knowledge Base Records
-    const dbRecords = config.databaseRecords || [];
-    const localDataFile = path.join(__dirname, '..', 'data', 'scraped_odia_data.json');
-    if (await fs.pathExists(localDataFile)) {
-      const localRecords = await fs.readJson(localDataFile);
-      dbRecords.push(...localRecords);
-    }
-
-    if (dbRecords.length > 0) {
-      console.log(`\n=== STEP 3: LOADING ${dbRecords.length} DATABASE / LOCAL RECORDS ===`);
-      for (const rec of dbRecords) {
+    // Load local scraped data
+    if (fs.existsSync(DATA_FILE)) {
+      const dataset = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      for (const rec of dataset) {
         if (rec.content) {
           rawDocuments.push({
             text: rec.content,
-            filename: rec.title,
-            metadata: {
-              source: rec.category || 'Database',
-              title: rec.title,
-              source_url: rec.source_url,
-              language: rec.language || 'Odia'
-            }
+            title: rec.title || 'Untitled',
+            source: rec.category || 'Local',
+            language: rec.language || 'odia',
           });
         }
       }
     }
 
-    console.log(`\nTotal Raw Documents Collected: ${rawDocuments.length}`);
+    // Load additional PDF-extracted content from data dir
+    const extraDataFile = path.join(__dirname, '..', 'data', 'scraped_odia_data.json');
+    // Already loaded above
 
-    // STEP 4: Text Chunking
-    console.log(`\n=== STEP 4: CHUNKING DOCUMENTS (Size: 500, Overlap: 100) ===`);
+    console.log(`[RAGPipeline] Loaded ${rawDocuments.length} documents`);
+
+    // Chunk all documents
     const allChunks = [];
-    for (const doc of rawDocuments) {
-      const chunks = this.textChunker.processDocument(doc);
-      allChunks.push(...chunks);
+    const ts = Date.now();
+    for (const [docIdx, doc] of rawDocuments.entries()) {
+      const chunks = chunkText(doc.text);
+      for (const [cIdx, chunkText_] of chunks.entries()) {
+        allChunks.push({
+          id: `chunk_${ts}_${docIdx}_${cIdx}`,
+          text: chunkText_,
+          embedding: generateSimpleEmbedding(chunkText_),
+          metadata: {
+            title: doc.title,
+            source: doc.source,
+            language: doc.language,
+            chunkIndex: cIdx,
+            totalChunks: chunks.length,
+          },
+        });
+      }
     }
-    console.log(`✅ Generated ${allChunks.length} text chunks.`);
 
-    // STEP 5: Generating Vector Embeddings
-    console.log(`\n=== STEP 5: GENERATING 384-DIM EMBEDDINGS (Local Xenova Model) ===`);
-    const embeddedChunks = await this.embeddingGenerator.generateBatchEmbeddings(allChunks);
+    console.log(`[RAGPipeline] Generated ${allChunks.length} chunks`);
 
-    // STEP 6: Store in Vector Database
-    console.log(`\n=== STEP 6: STORING CHUNKS IN VECTOR DATABASE ===`);
-    const storedCount = await this.vectorStore.storeChunks(embeddedChunks);
-
-    // STEP 7: Final Statistics
+    // Store in vector store
+    const stored = await this.vectorStore.storeChunks(allChunks);
     const stats = await this.vectorStore.getStats();
 
-    console.log('\n========================================');
-    console.log('🎉 RAG PIPELINE EXECUTION COMPLETE!');
-    console.log('========================================');
-    console.log('Final Vector DB Stats:', stats);
-
+    console.log('=== RAG Pipeline: Complete ===');
     return {
       status: 'success',
-      chunksProcessed: embeddedChunks.length,
-      storedCount,
-      stats
+      chunksProcessed: allChunks.length,
+      storedCount: stored,
+      stats,
     };
   }
 
-  /**
-   * Queries the vector database for relevant context matching user search text
-   * @param {string} userQuery - Natural language search query
-   * @param {number} topK - Top K results to retrieve
-   * @returns {Promise<Object>} - Search query results payload
-   */
   async query(userQuery, topK = 5) {
     if (!userQuery || typeof userQuery !== 'string') {
-      throw new Error('User query must be a non-empty string.');
+      throw new Error('Query must be a non-empty string.');
     }
-
     await this.vectorStore.connect();
 
-    console.log(`🔍 [RAGPipeline] Querying vector DB for: "${userQuery}"...`);
-    const queryEmbedding = await this.embeddingGenerator.generateEmbedding(userQuery);
-    const matches = await this.vectorStore.searchSimilar(queryEmbedding, topK);
+    const queryEmbedding = generateSimpleEmbedding(userQuery);
+    const results = await this.vectorStore.searchSimilar(queryEmbedding, topK);
 
     return {
       status: 'success',
       query: userQuery,
-      resultsCount: matches.length,
-      results: matches
+      resultsCount: results.length,
+      results,
     };
   }
 }

@@ -22,11 +22,11 @@ function generateOdiaConfirmationText(data) {
   switch (action) {
     case 'SALE':
       if (payment_type === 'CREDIT') {
-        text = `${partyName ? partyName + 'ଙ୍କ ଖାତାରେ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' ବିକ୍ରି ' : '비크리 '}ବାକିରେ ଲିପିବଦ୍ଧ କରାଗଲା।`;
+        text = `${partyName ? partyName + 'ଙ୍କ ଖାତାରେ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' ବିକ୍ରି ' : 'ବିକ୍ରି '}ବାକିରେ ଲିପିବଦ୍ଧ କରାଗଲା।`;
       } else if (payment_type === 'ONLINE') {
-        text = `${partyName ? partyName + 'ଙ୍କୁ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' ବିକ୍ରି ' : '비크리 '}ଅନଲାଇନ୍ ମାଧ୍ୟମରେ ସଫଳ ହେଲା।`;
+        text = `${partyName ? partyName + 'ଙ୍କୁ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' ବିକ୍ରି ' : 'ବିକ୍ରି '}ଅନଲାଇନ୍ ମାଧ୍ୟମରେ ସଫଳ ହେଲା।`;
       } else {
-        text = `${partyName ? partyName + 'ଙ୍କୁ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' ବିକ୍ରି ' : '비크리 '}ନଗଦ କରାଗଲା।`;
+        text = `${partyName ? partyName + 'ଙ୍କୁ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' ବିକ୍ରି ' : 'ବିକ୍ରି '}ନଗଦ କରାଗଲା।`;
       }
       break;
 

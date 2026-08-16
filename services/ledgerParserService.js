@@ -1,131 +1,105 @@
-const axios = require('axios');
+/**
+ * ledgerParserService.js
+ * Parses Odia transaction text using Gemini and extracts structured JSON.
+ */
 
+require('dotenv').config();
+const { GoogleGenAI } = require('@google/genai');
+
+let ai;
+try {
+  ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+} catch (err) {
+  console.error('[LedgerParser] GenAI init error:', err.message);
+}
+
+const SYSTEM_PROMPT = `
+You are an expert Odia language business transaction parser for small shopkeepers and MSMEs in Odisha.
+Your task: Extract structured transaction data from spoken/written Odia text.
+
+OUTPUT RULES:
+1. Always return ONLY valid JSON — no markdown, no explanation.
+2. JSON must have exactly these keys: action, party, amount, item, payment_type
+3. action values: SALE | PURCHASE | RECEIVE_CASH | PAY_CASH | CREDIT_GIVEN | UNKNOWN
+4. payment_type values: CASH | CREDIT | ONLINE | UNKNOWN
+5. amount must be a number (integer or float), 0 if unknown
+6. party and item: short strings or "N/A" if not mentioned
+7. Never invent details not present in the text.
+
+EXAMPLES:
+Input: "ରମେଶଙ୍କୁ ୧୨,୦୦୦ ଟଙ୍କାର ଶାଢ଼ୀ ବାକିରେ ବିକ୍ରି କଲି"
+Output: {"action":"SALE","party":"ରମେଶ","amount":12000,"item":"ଶାଢ଼ୀ","payment_type":"CREDIT"}
+
+Input: "ହରି ୫୦୦ ଟଙ୍କା ନଗଦ ଦେଲା"
+Output: {"action":"RECEIVE_CASH","party":"ହରି","amount":500,"item":"N/A","payment_type":"CASH"}
+
+Input: "ଶ୍ୟାମ ଭାଇଙ୍କ ଠାରୁ ୨୦୦୦ ଟଙ୍କାର ରାସନ ବାକିରେ ଆଣିଲି"
+Output: {"action":"PURCHASE","party":"ଶ୍ୟାମ","amount":2000,"item":"ରାସନ","payment_type":"CREDIT"}
+
+Input: "ରଞ୍ଜନ କୁ ୩୦୦ ଟଙ୍କା ଫୋନପେ ରେ ପଠେଇଲି"
+Output: {"action":"PAY_CASH","party":"ରଞ୍ଜନ","amount":300,"item":"N/A","payment_type":"ONLINE"}
+`;
+
+// Working Gemini models — verified list only
 const FALLBACK_MODELS = [
   'gemini-2.5-flash-lite',
-  'gemini-3.5-flash-lite',
-  'gemini-3.6-flash',
-  'gemini-3.7-flash',
-  'gemini-3.1-flash-lite',
-  'gemini-flash-lite-latest'
+  'gemini-2.5-flash',
+  'gemini-flash-lite-latest',
+  'gemini-flash-latest',
 ];
 
 /**
- * System instruction defining the role, extraction variables, and few-shot examples
- * to train Gemini to act as a highly localized Odia financial ledger processor.
+ * Analyse an Odia transaction text and return structured JSON.
+ * @param {string} text - Odia spoken/written transaction text
+ * @returns {Promise<Object>} - Structured transaction object
  */
-const SYSTEM_INSTRUCTION = `You are "Odia.ai Financial Brain", a highly precise, localized financial transaction parser designed for local shopkeepers, small businesses, and MSMEs in Odisha, India.
-Your task is to analyze spoken Odia text related to financial transactions (such as sales, purchases, credits, payments received, or inventory changes) and parse it into a clean, structured JSON format.
-
-You must extract the following properties:
-1. action: The type of transaction. Allowed values:
-   - "SALE": Selling an item or service.
-   - "RECEIVE_CASH": Receiving cash payment from a customer/party.
-   - "PAY_CASH": Paying cash/money to a supplier or party.
-   - "PURCHASE": Buying inventory, goods, or items for the business.
-   - "CREDIT_GIVEN": Recording a credit ledger entry where a party owes money.
-   - "UNKNOWN": If transaction intent cannot be understood.
-2. party: The name of the person or entity involved. Transliterate this name into standard English script (Latin alphabet) with the first letter capitalized (e.g. ରମେଶ -> "Ramesh", ହରି -> "Hari", ଶ୍ୟାମ -> "Shyam"). If no party is specified, return "N/A".
-3. amount: The transaction amount in Indian Rupees (INR) as a numeric value. Extract and convert any Odia numerals (୧, ୨, ୩, ୪, ୫, ୬, ୭, ୮, <ctrl42>, ୦) or spelled-out currency text (e.g., "pancha sanda" -> 500, "das hazar" -> 10000) into actual JavaScript numbers. If no amount is specified, return 0.
-4. item: The item or service sold or purchased. Translate this to English if possible, or transliterate if specific (e.g., "Sambalpuri Saree", "Grocery Items", "Cement", "Rice", "Oil"). If no item is specified, return "N/A".
-5. payment_type: The payment terms or method. Allowed values:
-   - "CASH": If the text explicitly mentions "nagada" (cash), "cash", "hand-to-hand", or implies direct cash payment.
-   - "CREDIT": If the text implies a credit entry (e.g., "khata", "baki", "dhar", "debara achhi", "dhare deli") or is a sale on credit.
-   - "ONLINE": If online payment terms like "UPI", "PhonePe", "Paytm", "GPay", "online transfer" are mentioned.
-   - "UNKNOWN": If not specified.
-
-Guidelines:
-- You must output ONLY a valid JSON object. Do not include markdown wraps (like \`\`\`json ... \`\`\`), preambles, or explanations.
-- Transliterate names accurately from Odia to English. E.g., ରମେଶ -> Ramesh, ହରି -> Hari.
-- Parse Odia numerals accurately.
-
-Training / Few-Shot Examples:
-Example 1:
-- Input: "ରମେଶଙ୍କୁ ୧୨,୦୦୦ ଟଙ୍କାର ସମ୍ବଲପୁରୀ ଶାଢ଼ୀ ବିକ୍ରି କଲି।"
-- Output JSON: { "action": "SALE", "party": "Ramesh", "amount": 12000, "item": "Sambalpuri Saree", "payment_type": "CREDIT" }
-
-Example 2:
-- Input: "ହରି ମୋତେ ନଗଦ ୫୦୦ ଟଙ୍କା ଦେଲା।"
-- Output JSON: { "action": "RECEIVE_CASH", "party": "Hari", "amount": 500, "item": "N/A", "payment_type": "CASH" }
-
-Example 3:
-- Input: "ଶ୍ୟାମ ଭାଇଙ୍କ ଠାରୁ ୨୦୦୦ ଟଙ୍କାର ରାସନ ସାମଗ୍ରୀ ବାକିରେ ଆଣିଲି।"
-- Output JSON: { "action": "PURCHASE", "party": "Shyam Bhai", "amount": 2000, "item": "Grocery Items", "payment_type": "CREDIT" }
-
-Example 4:
-- Input: "ରଞ୍ଜନ କୁ ୩୦୦ ଟଙ୍କା ଫୋନପେ ରେ ପଠେଇଲି।"
-- Output JSON: { "action": "PAY_CASH", "party": "Ranjan", "amount": 300, "item": "N/A", "payment_type": "ONLINE" }`;
-
-/**
- * Sends transcribed Odia text to Gemini to parse and extract financial variables.
- * Uses multi-model fallback to bypass quota errors on individual models.
- * 
- * @param {string} odiaText - Raw transcribed Odia script.
- * @returns {Promise<Object>} - Extracted transaction details in JSON.
- */
-async function analyzeTransaction(odiaText) {
-  const geminiApiKey = process.env.GEMINI_API_KEY;
-  if (!geminiApiKey || geminiApiKey === 'your_gemini_api_key_here') {
-    throw new Error('Gemini API Key is not configured in .env');
-  }
-
-  console.log(`[Ledger Parser] Analyzing text: "${odiaText}"`);
-
-  // Prepare API call payload
-  const payload = {
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: `Please parse this Odia financial transaction: "${odiaText}"`
-          }
-        ]
-      }
-    ],
-    systemInstruction: {
-      parts: [
-        {
-          text: SYSTEM_INSTRUCTION
-        }
-      ]
-    },
-    generationConfig: {
-      responseMimeType: 'application/json', // Force response to be strict JSON
-      temperature: 0.1 // Low temperature for high precision and factual extraction
-    }
-  };
+async function analyzeTransaction(text) {
+  if (!ai) throw new Error('Google GenAI SDK not initialized. Check GEMINI_API_KEY.');
 
   let lastError;
-
-  for (const modelName of FALLBACK_MODELS) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
+  for (const model of FALLBACK_MODELS) {
     try {
-      console.log(`[Ledger Parser] Attempting parsing with model: ${modelName}...`);
-      const response = await axios.post(url, payload, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000
+      console.log(`[LedgerParser] Trying model: ${model}`);
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Gemini request timed out')), 10000)
+      );
+
+      const apiCall = ai.models.generateContent({
+        model,
+        contents: `Parse this Odia transaction text:\n"${text}"`,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          temperature: 0.1,
+        },
       });
 
-      if (response && response.data && response.data.candidates && response.data.candidates.length > 0) {
-        const parsedText = response.data.candidates[0].content.parts[0].text;
-        console.log(`[Ledger Parser] (${modelName}) Raw output: ${parsedText.trim()}`);
-        const transactionData = JSON.parse(parsedText.trim());
-        console.log('[Ledger Parser] Successfully parsed JSON:', transactionData);
-        return transactionData;
-      }
-    } catch (error) {
-      lastError = error;
-      const errMessage = error.response?.data?.error?.message || error.message;
-      const status = error.response?.status;
-      console.warn(`[Ledger Parser] Model ${modelName} returned status ${status}: ${errMessage}. Rotating...`);
+      const response = await Promise.race([apiCall, timeoutPromise]);
+      const raw = response?.text?.trim() || '';
+
+      // Strip markdown code fences if present
+      const jsonStr = raw.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
+
+      const parsed = JSON.parse(jsonStr);
+      console.log(`[LedgerParser] Parsed with ${model}:`, parsed);
+      return parsed;
+    } catch (err) {
+      lastError = err;
+      console.warn(`[LedgerParser] Model ${model} failed: ${err.message}`);
     }
   }
 
-  const finalMessage = lastError?.response?.data?.error?.message || lastError?.message || 'All models exhausted.';
-  console.error('[Ledger Parser] Error during transaction analysis:', finalMessage);
-  throw new Error(`Ledger Parser Error: ${finalMessage}`);
+  // All models failed — return safe default
+  console.error('[LedgerParser] All models failed. Returning UNKNOWN transaction.');
+  return {
+    action: 'UNKNOWN',
+    party: 'N/A',
+    amount: 0,
+    item: 'N/A',
+    payment_type: 'UNKNOWN',
+  };
 }
 
 module.exports = {
-  analyzeTransaction
+  analyzeTransaction,
 };

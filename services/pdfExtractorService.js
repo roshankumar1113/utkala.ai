@@ -1,124 +1,104 @@
-const fs = require('fs-extra');
-const path = require('path');
-const pdfParse = require('pdf-parse');
-
 /**
- * PDFExtractor Class for RAG Systems
- * Extracts structured text, metadata, and page statistics from single or batch PDF files.
+ * pdfExtractorService.js
+ * Extracts text and metadata from PDF files using pdf-parse.
  */
+
+const fs = require('fs');
+const path = require('path');
+
+let pdfParse;
+try {
+  pdfParse = require('pdf-parse');
+} catch (err) {
+  console.warn('[PDFExtractor] pdf-parse not installed. PDF extraction unavailable.');
+}
+
 class PDFExtractor {
-  constructor(options = {}) {
-    this.maxCharacterLength = options.maxCharacterLength || 500000; // Truncate very large PDFs
-    this.defaultLanguage = options.defaultLanguage || 'Odia';
+  constructor(maxCharLength = 500000, defaultLanguage = 'odia') {
+    this.maxCharLength = maxCharLength;
+    this.defaultLanguage = defaultLanguage;
   }
 
   /**
-   * Extract text, metadata, and page count from a single PDF file
-   * @param {string} pdfPath - Path to the PDF file
-   * @returns {Promise<Object>} - Structured PDF data payload
+   * Extract text and metadata from a single PDF file.
+   * @param {string} pdfPath - Absolute path to the PDF file
+   * @returns {Promise<Object>} - Extraction result
    */
   async extractFromPDF(pdfPath) {
     const filename = path.basename(pdfPath);
-    console.log(`📄 [PDFExtractor] Extracting: "${filename}"...`);
+    console.log(`[PDFExtractor] Extracting: "${filename}"`);
 
-    // 1. File existence error handling
-    if (!await fs.pathExists(pdfPath)) {
-      const errorMsg = `File not found at path: "${pdfPath}"`;
-      console.error(`❌ [PDFExtractor] ${errorMsg}`);
-      return {
-        success: false,
-        filename,
-        error: errorMsg
-      };
+    if (!fs.existsSync(pdfPath)) {
+      return { success: false, filename, error: `File not found: ${pdfPath}` };
+    }
+
+    if (!pdfParse) {
+      return { success: false, filename, error: 'pdf-parse library not installed. Run: npm install pdf-parse' };
     }
 
     try {
-      // 2. Read PDF buffer
-      const dataBuffer = await fs.readFile(pdfPath);
-
-      // 3. Parse PDF with pdf-parse
+      const dataBuffer = fs.readFileSync(pdfPath);
       const data = await pdfParse(dataBuffer);
 
-      let extractedText = data.text ? data.text.trim() : '';
+      let text = (data.text || '').trim();
       let isTruncated = false;
 
-      // 4. Handle very large PDFs (Truncate safeguard)
-      if (extractedText.length > this.maxCharacterLength) {
-        extractedText = extractedText.substring(0, this.maxCharacterLength) + '\n\n[TRUNCATED: Exceeded maximum character limit]';
+      if (text.length > this.maxCharLength) {
+        text = text.slice(0, this.maxCharLength) + '\n\n[TRUNCATED]';
         isTruncated = true;
-        console.warn(`⚠️ [PDFExtractor] "${filename}" text exceeded limit. Truncated to ${this.maxCharacterLength} characters.`);
       }
 
-      // 5. Structure metadata
-      const info = data.info || {};
       const metadata = {
-        title: info.Title && info.Title.trim() !== '' ? info.Title.trim() : path.parse(pdfPath).name,
-        author: info.Author && info.Author.trim() !== '' ? info.Author.trim() : 'Sarala Dasa',
-        date: info.CreationDate || new Date().toISOString(),
+        title: (data.info?.Title || path.parse(filename).name).trim(),
+        author: (data.info?.Author || 'Unknown').trim(),
         source: 'PDF',
-        language: this.defaultLanguage
+        language: this.defaultLanguage,
       };
 
-      console.log(`✅ [PDFExtractor] Successfully extracted "${filename}" (${data.numpages} pages, ${extractedText.length} chars)`);
+      console.log(`[PDFExtractor] Extracted "${filename}" (${data.numpages} pages, ${text.length} chars)`);
 
       return {
         success: true,
         filename,
-        pages: data.numpages,
-        text: extractedText,
+        pages: data.numpages || 1,
+        text,
         metadata,
-        isTruncated
+        isTruncated,
       };
-
-    } catch (error) {
-      // 6. Invalid/Corrupt PDF error handling (Skip gracefully)
-      console.error(`❌ [PDFExtractor] Failed to parse PDF "${filename}": ${error.message}`);
-      return {
-        success: false,
-        filename,
-        error: `Invalid or unparseable PDF: ${error.message}`
-      };
+    } catch (err) {
+      console.error(`[PDFExtractor] Failed to parse "${filename}": ${err.message}`);
+      return { success: false, filename, error: `Invalid or unparseable PDF: ${err.message}` };
     }
   }
 
   /**
-   * Extract text and metadata from all PDFs in a directory
-   * @param {string} pdfDirectory - Directory containing PDF files
-   * @returns {Promise<Array<Object>>} - Array of structured PDF data payloads
+   * Extract text from all PDFs in a directory.
+   * @param {string} pdfDirectory - Path to directory containing PDFs
+   * @returns {Promise<Array>} - Array of extraction results
    */
   async extractBatchPDFs(pdfDirectory) {
-    console.log(`📂 [PDFExtractor] Starting batch extraction for directory: "${pdfDirectory}"...`);
-
-    if (!await fs.pathExists(pdfDirectory)) {
-      console.error(`❌ [PDFExtractor] Directory not found: "${pdfDirectory}"`);
+    if (!fs.existsSync(pdfDirectory)) {
+      console.warn(`[PDFExtractor] Directory not found: ${pdfDirectory}`);
       return [];
     }
 
-    const files = await fs.readdir(pdfDirectory);
-    const pdfFiles = files.filter(file => file.toLowerCase().endsWith('.pdf'));
+    const files = fs.readdirSync(pdfDirectory).filter(f => f.toLowerCase().endsWith('.pdf'));
 
-    if (pdfFiles.length === 0) {
-      console.warn(`⚠️ [PDFExtractor] No PDF files found in directory "${pdfDirectory}".`);
+    if (!files.length) {
+      console.log(`[PDFExtractor] No PDFs found in: ${pdfDirectory}`);
       return [];
     }
 
-    console.log(`🔍 [PDFExtractor] Found ${pdfFiles.length} PDF files to process.`);
-
+    console.log(`[PDFExtractor] Processing ${files.length} PDFs in: ${pdfDirectory}`);
     const results = [];
-    for (let i = 0; i < pdfFiles.length; i++) {
-      const pdfFile = pdfFiles[i];
-      const fullPath = path.join(pdfDirectory, pdfFile);
-      console.log(`[Batch Progress ${i + 1}/${pdfFiles.length}] Processing: ${pdfFile}`);
-      
-      const result = await this.extractFromPDF(fullPath);
-      if (result.success) {
-        results.push(result);
-      } else {
-        console.warn(`⚠️ [PDFExtractor] Skipping file "${pdfFile}" due to error.`);
-      }
+
+    for (const [i, file] of files.entries()) {
+      console.log(`[PDFExtractor] [${i + 1}/${files.length}] ${file}`);
+      const result = await this.extractFromPDF(path.join(pdfDirectory, file));
+      if (result.success) results.push(result);
     }
 
-    console.log(`🎉 [PDFExtractor] Batch extraction complete. Processed ${results.length}/${pdfFiles.length} PDFs successfully.`);
+    console.log(`[PDFExtractor] Batch complete: ${results.length}/${files.length} extracted.`);
     return results;
   }
 }
