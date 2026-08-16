@@ -45,14 +45,38 @@ app.get('/health', (req, res) => {
   });
 });
 
-// GitHub Webhook Endpoints
-app.post('/github', (req, res) => {
-  console.log('GitHub webhook received!');
-  res.json({ status: 'ok', message: 'Webhook received' });
+// ============================================
+// GITHUB WEBHOOK ENDPOINT
+// ============================================
+
+// Handle GitHub webhook
+app.post('/github', async (req, res) => {
+  try {
+    console.log('🪝 GitHub webhook received!');
+    console.log('Event type:', req.headers['x-github-event']);
+    console.log('Action:', req.body.action || 'N/A');
+    
+    res.status(200).json({ 
+      status: 'ok',
+      message: 'Webhook received and processed',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Webhook error:', error);
+    res.status(500).json({ 
+      status: 'error',
+      message: error.message 
+    });
+  }
 });
 
+// Health check for webhook endpoint
 app.get('/github', (req, res) => {
-  res.json({ status: 'ok', message: 'Webhook endpoint ready' });
+  res.status(200).json({ 
+    status: 'ok',
+    message: 'Webhook endpoint ready',
+    endpoint: '/github'
+  });
 });
 
 
