@@ -150,6 +150,7 @@ services:
     container_name: utkala-monitoring-agent
     environment:
       AGENT_ID: monitoring-1
+      APP_HEALTH_URL: http://app:5000/health
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://postgres:postgres@db:5432/utkala_agents
       GITHUB_TOKEN: ${GITHUB_TOKEN}
@@ -159,6 +160,7 @@ services:
     depends_on:
       - redis
       - db
+      - app
     command: node agents/monitoring-agent.js
     restart: unless-stopped
 

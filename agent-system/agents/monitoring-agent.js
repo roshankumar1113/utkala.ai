@@ -4,7 +4,7 @@ const config = require('../config');
 
 const github = new Octokit({ auth: config.GITHUB_TOKEN });
 
-const APP_HEALTH_URL = process.env.APP_HEALTH_URL || 'http://localhost:5000/health';
+const APP_HEALTH_URL = process.env.APP_HEALTH_URL || 'http://app:5000/health';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 const notifyWebhook = async (title, message, isError = false) => {
