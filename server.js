@@ -1,14 +1,22 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const voiceLedgerRoutes = require('./routes/voiceLedgerRoutes');
+const voiceChatSocket = require('./routes/voiceChatSocket');
 const chatService = require('./services/chatService');
 const aiController = require('./controllers/aiController');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
+
+// Initialize Socket.io Voice Chat
+const io = voiceChatSocket(server);
+app.set('io', io);
+
 
 // Ensure public output directory exists for serving generated audio files
 const publicOutputsDir = path.join(__dirname, 'public', 'outputs');
@@ -268,24 +276,47 @@ app.get('/api/rag/stats', async (req, res) => {
   }
 });
 
-// Single Unified Text Chat POST Endpoint
+// Single Unified Text & Multimodal Chat POST Endpoint
 async function handleChat(req, res) {
-  const userMessage = req.body.message;
-  console.log(`[Server] Received message input for /api/chat: "${userMessage}"`);
+  const userMessage = req.body.message || req.body.query || '';
+  const history = req.body.history || req.body.conversation_history || req.body.messages || [];
+  const sessionId = req.body.sessionId || req.body.session_id;
+  const sessionData = req.body.session || req.body.userContext || {};
+  const image = req.body.image || null; // { mimeType, base64 }
+  const useRag = req.body.useRag !== false;
 
-  if (!userMessage || userMessage.trim() === '') {
+  if (sessionId) sessionData.sessionId = sessionId;
+
+  console.log(`[Server] Received message input for /api/chat: "${userMessage?.substring(0, 60)}" (Session: ${sessionId || 'new'}, Image: ${Boolean(image)})`);
+
+  if ((!userMessage || userMessage.trim() === '') && !image) {
     return res.status(400).json({
       success: false,
-      message: 'Message cannot be empty.'
+      message: 'Message or image attachment cannot be empty.'
     });
   }
 
   try {
-    const aiResponse = await chatService.generateUniversalResponse(userMessage);
+    const result = await chatService.generateUniversalResponse(
+      userMessage || 'Analyze this image and explain in Odia.',
+      history.length > 0 ? history : sessionId,
+      sessionData,
+      { image, useRag }
+    );
     
+    // Support both string and object responses
+    const responseText = typeof result === 'string' ? result : result.response;
+    const resultSessionId = result.sessionId || sessionId;
+
     return res.status(200).json({
       success: true,
-      response: aiResponse
+      response: responseText,
+      message: responseText,
+      sessionId: resultSessionId,
+      transliteration: result.transliteration || null,
+      ragSources: result.ragSources || [],
+      ragContextUsed: result.ragContextUsed || false,
+      session: result.session || null
     });
   } catch (error) {
     console.error('[Server] Chat generation error:', error.message);
@@ -301,6 +332,27 @@ async function handleChat(req, res) {
 // Bind both endpoints to handleChat to maintain compatibility with client variations
 app.post('/api/chat', handleChat);
 app.post('/api/chat-multimodal', handleChat);
+
+// Transliteration Check Endpoint
+app.post('/api/chat/check-transliteration', async (req, res) => {
+  try {
+    const message = req.body.message || '';
+    const result = await chatService.transliterationService.detectAndClarifyTransliteration(message);
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Session Info Endpoint
+app.get('/api/chat/session/:sessionId', (req, res) => {
+  try {
+    const session = chatService.sessionMemoryService.getOrCreateSession(req.params.sessionId);
+    return res.status(200).json({ success: true, session });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // 404 Route Fallback
 app.use((req, res, next) => {
@@ -320,14 +372,16 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start Chat Server
-const server = app.listen(PORT, '0.0.0.0', () => {
+// Start Chat & Voice Server
+server.listen(PORT, '0.0.0.0', () => {
   console.log('==================================================');
   console.log(`🚀 Utkal.ai Chat & Voice Server running on Port ${PORT}`);
   console.log(`👉 Chat Interface: http://localhost:${PORT}`);
   console.log(`👉 Voice API: http://localhost:${PORT}/api/process-voice`);
+  console.log(`👉 Voice Socket.io: Active on ws://localhost:${PORT}`);
   console.log('==================================================');
 });
+
 
 // Resilient error handling for server port binding
 server.on('error', (error) => {

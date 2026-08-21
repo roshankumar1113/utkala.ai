@@ -9,7 +9,7 @@ Multi-backend embedding generator with intelligent fallback chain:
 import os
 import math
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -56,11 +56,11 @@ class EmbeddingGenerator:
 
     def __init__(self, model_type: str = "gemini", max_char_length: int = 2048):
         self.max_char_length = max_char_length
-        self._st_model = None
+        self._st_model: Any = None
 
         # ── resolve which backend we can actually use ────────────────────────
         api_key = os.getenv("GEMINI_API_KEY", "")
-        if model_type == "gemini" and _GEMINI_AVAILABLE and api_key:
+        if model_type == "gemini" and _GEMINI_AVAILABLE and genai is not None and api_key:
             genai.configure(api_key=api_key)
             self.model_type = "gemini"
             logger.info("✅ EmbeddingGenerator: Gemini text-embedding-004 (768-dim)")
@@ -138,8 +138,12 @@ class EmbeddingGenerator:
 
     def _st_embed(self, text: str) -> List[float]:
         """sentence-transformers all-MiniLM-L6-v2, 384-dim."""
+        if not _ST_AVAILABLE or SentenceTransformer is None:
+            raise RuntimeError("sentence-transformers is not available in this environment")
         if self._st_model is None:
             logger.info("🤖 Loading sentence-transformers model...")
             self._st_model = SentenceTransformer("all-MiniLM-L6-v2")
+        if self._st_model is None:
+            raise RuntimeError("Failed to load sentence-transformers model")
         vec = self._st_model.encode(text, normalize_embeddings=True)
         return vec.tolist()

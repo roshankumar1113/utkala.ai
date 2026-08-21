@@ -16,13 +16,12 @@ function generateOdiaConfirmationText(data) {
   const itemName = (item && item !== 'N/A') ? item : '';
   const amtText = (amount && amount > 0) ? `${amount} ଟଙ୍କା` : '';
   
-  // Default fallback transaction confirmation in Odia ("Transaction recorded successfully.")
-  let text = "ବ୍ୟବସାୟିକ କାରବାର ସଫଳତାର ସହ ଲିପିବଦ୍ଧ ହେଲା।";
+  let text = "";
 
   switch (action) {
     case 'SALE':
       if (payment_type === 'CREDIT') {
-        text = `${partyName ? partyName + 'ଙ୍କ ଖାତାରେ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' ବିକ୍ରି ' : 'ବିକ୍ରି '}ବାକିରେ ଲିପିବଦ୍ଧ କରାଗଲା।`;
+        text = `${partyName ? partyName + 'ଙ୍କ ଖାତାରେ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' ବିକ୍ରି ' : 'ବିକ୍ରି '}ବାକିରେ ରେକର୍ଡ ହେଲା।`;
       } else if (payment_type === 'ONLINE') {
         text = `${partyName ? partyName + 'ଙ୍କୁ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' ବିକ୍ରି ' : 'ବିକ୍ରି '}ଅନଲାଇନ୍ ମାଧ୍ୟମରେ ସଫଳ ହେଲା।`;
       } else {
@@ -48,7 +47,7 @@ function generateOdiaConfirmationText(data) {
 
     case 'PURCHASE':
       if (payment_type === 'CREDIT') {
-        text = `${partyName ? partyName + 'ଙ୍କ ଠାରୁ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' କ୍ରୟ ' : 'କ୍ରୟ '}ବାକିରେ ଲିପିବଦ୍ଧ ହେଲା।`;
+        text = `${partyName ? partyName + 'ଙ୍କ ଠାରୁ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' କ୍ରୟ ' : 'କ୍ରୟ '}ବାକିରେ ରେକର୍ଡ ହେଲା।`;
       } else {
         text = `${partyName ? partyName + 'ଙ୍କ ଠାରୁ ' : ''}${amtText ? amtText + 'ର ' : ''}${itemName ? itemName + ' କ୍ରୟ ' : 'କ୍ରୟ '}ନଗଦ ସଫଳ ହେଲା।`;
       }
@@ -59,15 +58,19 @@ function generateOdiaConfirmationText(data) {
       break;
 
     default:
-      // Generic fallback combining recognized details
       if (partyName && amtText) {
         text = `${partyName}ଙ୍କ ସହ ${amtText}ର କାରବାର ରେକର୍ଡ କରାଗଲା।`;
+      } else if (amtText) {
+        text = `${amtText}ର କାରବାର ରେକର୍ଡ କରାଗଲା।`;
+      } else if (partyName) {
+        text = `${partyName}ଙ୍କ କାରବାର ରେକର୍ଡ କରାଗଲା।`;
       }
       break;
   }
 
-  return text;
+  return text.trim();
 }
+
 
 /**
  * POST /api/process-voice
@@ -135,60 +138,69 @@ async function processVoice(req, res) {
     }
 
     // --- STEP B: AI Brain & JSON Extraction (Parse Odia text via Ledger Parser) ---
-    let transactionJSON;
+    const chatService = require('../services/chatService');
+    const agentType = req.body?.agentType || 'general';
+    let transactionJSON = { action: 'UNKNOWN', party: 'N/A', amount: 0, item: 'N/A', payment_type: 'UNKNOWN' };
+    let isLedger = false;
+
     try {
       transactionJSON = await ledgerParserService.analyzeTransaction(transcribedText);
+      if (transactionJSON && transactionJSON.action !== 'UNKNOWN' && (transactionJSON.amount > 0 || transactionJSON.party !== 'N/A')) {
+        isLedger = true;
+      }
     } catch (geminiError) {
-      console.error('[Pipeline] Step B (Ledger Parser) Failed gracefully caught:', geminiError.message);
-      return res.status(200).json({
-        success: true,
-        fallback_to_text: true,
-        transcription: transcribedText,
-        transaction: {
-          action: 'UNKNOWN',
-          party: 'N/A',
-          amount: 0,
-          item: 'N/A',
-          payment_type: 'UNKNOWN'
-        },
-        confirmationText: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ସମସ୍ୟା ହେତୁ ଆପଣଙ୍କ ବ୍ୟବସାୟିକ କାରବାର ବିଶ୍ଳେଷଣ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ ମାଧ୍ୟମରେ ଚେଷ୍ଟା କରନ୍ତୁ ।',
-        audioUrl: null,
-        notice: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ସମସ୍ୟା ଯୋଗୁଁ କାରବାର ବିଶ୍ଳେଷଣ ବିଫଳ ହେଲା । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଲେଖି ଚେଷ୍ଟା କରନ୍ତୁ ।'
-      });
+      console.warn('[Pipeline] Ledger Parser check notice:', geminiError.message);
     }
 
-    // --- STEP C: Text-to-Speech Response (Odia audio confirmation) ---
-    // Generate natural Odia confirmation statement
-    const confirmationText = generateOdiaConfirmationText(transactionJSON);
-    console.log(`[Pipeline] Formulated confirmation text: "${confirmationText}"`);
+    // --- STEP C: Formulate Odia Response (Ledger confirmation OR Conversational Answer) ---
+    let confirmationText = '';
+    let aiAnswer = '';
 
-    let audioUrl;
+    if (isLedger) {
+      confirmationText = generateOdiaConfirmationText(transactionJSON);
+      console.log(`[Pipeline] Formulated ledger confirmation text: "${confirmationText}"`);
+    } else {
+      // Conversational query / RAG scheme lookup
+      try {
+        console.log(`[Pipeline] Processing conversational voice query: "${transcribedText}"`);
+        const chatRes = await chatService.generateUniversalResponse(transcribedText);
+        aiAnswer = typeof chatRes === 'string' ? chatRes : (chatRes.response || '');
+        // Clean markdown for spoken confirmation
+        confirmationText = aiAnswer
+          .replace(/[#*_\-`]/g, '')
+          .replace(/\n+/g, ' ')
+          .trim();
+        if (confirmationText.length > 300) {
+          // Take first complete sentence for concise voice playback
+          const sentences = confirmationText.split(/[।!?\.]+/).filter(Boolean);
+          confirmationText = sentences.slice(0, 2).join('। ') + '।';
+        }
+      } catch (chatErr) {
+        console.warn('[Pipeline] Chat generation notice:', chatErr.message);
+        confirmationText = 'ଆପଣଙ୍କ ପ୍ରଶ୍ନ ଗ୍ରହଣ କରାଗଲା । ଦୟାକରି ଡ୍ୟାସବୋର୍ଡରେ ଉତ୍ତର ଦେଖନ୍ତୁ ।';
+      }
+    }
+
+    // --- STEP D: Text-to-Speech Response (Odia audio synthesis) ---
+    let audioUrl = null;
     try {
       audioUrl = await voiceService.generateSpeech(confirmationText);
     } catch (ttsError) {
-      console.error('[Pipeline] Step C (TTS) Failed gracefully caught:', ttsError.message);
-      // Notice: If TTS fails, we return the parsed transaction successfully, but with fallback_to_text enabled and a friendly voice notice
-      return res.status(200).json({
-        success: true,
-        transcription: transcribedText,
-        transaction: transactionJSON,
-        confirmationText: confirmationText,
-        audioUrl: null,
-        fallback_to_text: true,
-        notice: 'ବ୍ୟବସାୟିକ କାରବାର ସଫଳତାର ସହ ଲିପିବଦ୍ଧ ହେଲା, କିନ୍ତୁ ନେଟୱର୍କ ସମସ୍ୟା ଯୋଗୁଁ ସ୍ୱର ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଯାଞ୍ଚ କରନ୍ତୁ ।'
-      });
+      console.error('[Pipeline] Step D (TTS) Failed gracefully caught:', ttsError.message);
     }
 
-    // Full Pipeline Success
-    console.log('[Pipeline] Complete 3-step pipeline executed successfully!');
+    console.log('[Pipeline] Complete voice pipeline executed successfully!');
     console.log('--------------------------------------------------');
     
     return res.status(200).json({
       success: true,
       transcription: transcribedText,
       transaction: transactionJSON,
-      confirmationText: confirmationText,
-      audioUrl: audioUrl
+      confirmationText: isLedger ? confirmationText : (aiAnswer || confirmationText),
+      isLedger: isLedger,
+      audioUrl: audioUrl,
+      fallback_to_text: !audioUrl,
+      notice: !audioUrl ? 'କାରବାର ସଫଳ ହେଲା, କିନ୍ତୁ କଣ୍ଠସ୍ୱର ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ ।' : undefined
     });
 
   } catch (globalError) {
@@ -249,6 +261,13 @@ async function transcribeOnly(req, res) {
 
   try {
     const transcription = await voiceService.transcribeAudio(req.file.buffer, req.file.originalname);
+    if (!transcription || transcription.trim() === '') {
+      return res.status(200).json({
+        success: false,
+        message: 'ସ୍ୱର ବୁଝାପଡ଼ିଲାନାହିଁ, ଆଉଥରେ ଚେଷ୍ଟା କରନ୍ତୁ।',
+        transcription: ''
+      });
+    }
     return res.status(200).json({
       success: true,
       transcription: transcription
@@ -256,10 +275,10 @@ async function transcribeOnly(req, res) {
   } catch (error) {
     console.error('[Server STT] Transcription error gracefully caught:', error.message);
     return res.status(200).json({
-      success: true,
-      transcription: 'କଣ୍ଠସ୍ୱର ଚିହ୍ନଟ ବିଫଳ।',
+      success: false,
+      transcription: '',
       fallback_to_text: true,
-      notice: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ବିଳମ୍ବ ଯୋଗୁଁ କଣ୍ଠସ୍ୱର ଅନୁବାଦ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଚେଷ୍ଟା କରନ୍ତୁ ।'
+      message: 'ସ୍ୱର ବୁଝାପଡ଼ିଲାନାହିଁ, ଆଉଥରେ ଚେଷ୍ଟା କରନ୍ତୁ।'
     });
   }
 }

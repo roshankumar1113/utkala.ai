@@ -1,12 +1,14 @@
 /**
  * voiceService.js
- * Handles Speech-to-Text (Sarvam AI) and Text-to-Speech (Sarvam AI Bulbul).
+ * Handles Speech-to-Text (Sarvam AI Saarikav2.5 + Gemini Multimodal Fallback)
+ * and Text-to-Speech (Sarvam AI Bulbul v2).
  */
 
 require('dotenv').config();
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { GoogleGenAI } = require('@google/genai');
 
 const SARVAM_API_KEY = process.env.SARVAM_API_KEY;
 const PUBLIC_OUTPUTS_DIR = path.join(__dirname, '..', 'public', 'outputs');
@@ -16,20 +18,44 @@ if (!fs.existsSync(PUBLIC_OUTPUTS_DIR)) {
   fs.mkdirSync(PUBLIC_OUTPUTS_DIR, { recursive: true });
 }
 
-/**
- * Transcribe an Odia audio buffer using Sarvam AI Speech-to-Text.
- * @param {Buffer} audioBuffer - Raw audio file buffer
- * @param {string} filename - Original filename (used to determine extension)
- * @returns {Promise<string>} - Transcribed text
- */
-async function transcribeAudio(audioBuffer, filename) {
-  console.log(`[VoiceService STT] Transcribing audio: ${filename}`);
+let ai;
+try {
+  ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+} catch (err) {
+  console.error('[VoiceService] GenAI init error:', err.message);
+}
 
-  if (!SARVAM_API_KEY) {
-    throw new Error('SARVAM_API_KEY is not configured in .env');
+/**
+ * Detect actual audio mime type and extension from buffer magic bytes.
+ * @param {Buffer} buffer
+ * @param {string} [originalFilename='audio.wav']
+ * @returns {{ mimeType: string, filename: string }}
+ */
+function detectAudioMimeAndExt(buffer, originalFilename = 'audio.wav') {
+  if (buffer && buffer.length >= 4) {
+    // WebM / EBML: 0x1A, 0x45, 0xDF, 0xA3
+    if (buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
+      return { mimeType: 'audio/webm', filename: 'audio.webm' };
+    }
+    // WAV / RIFF: 'RIFF'
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46) {
+      return { mimeType: 'audio/wav', filename: 'audio.wav' };
+    }
+    // Ogg: 'OggS'
+    if (buffer[0] === 0x4f && buffer[1] === 0x67 && buffer[2] === 0x67 && buffer[3] === 0x53) {
+      return { mimeType: 'audio/ogg', filename: 'audio.ogg' };
+    }
+    // MP3: 'ID3'
+    if (buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) {
+      return { mimeType: 'audio/mpeg', filename: 'audio.mp3' };
+    }
+    // MP4 / M4A
+    if (buffer.length >= 12 && buffer.toString('ascii', 4, 8) === 'ftyp') {
+      return { mimeType: 'audio/mp4', filename: 'audio.mp4' };
+    }
   }
 
-  const ext = path.extname(filename || 'audio.wav').toLowerCase() || '.wav';
+  const ext = path.extname(originalFilename || 'audio.wav').toLowerCase() || '.wav';
   const mimeTypes = {
     '.wav': 'audio/wav',
     '.mp3': 'audio/mpeg',
@@ -39,56 +65,106 @@ async function transcribeAudio(audioBuffer, filename) {
     '.webm': 'audio/webm',
     '.flac': 'audio/flac',
   };
-  const mimeType = mimeTypes[ext] || 'audio/wav';
-
-  // Build multipart form-data manually using axios FormData pattern
-  const FormData = require('form-data');
-  const form = new FormData();
-  form.append('file', audioBuffer, { filename: `audio${ext}`, contentType: mimeType });
-  form.append('model', 'saarika:v2');
-  form.append('language_code', 'or-IN'); // Odia
-
-  const response = await axios.post(
-    'https://api.sarvam.ai/speech-to-text',
-    form,
-    {
-      headers: {
-        ...form.getHeaders(),
-        'api-subscription-key': SARVAM_API_KEY,
-      },
-      timeout: 30000,
-    }
-  );
-
-  const transcript = response.data?.transcript || response.data?.text || '';
-  console.log(`[VoiceService STT] Transcription complete: "${transcript.substring(0, 80)}..."`);
-  return transcript;
+  return { mimeType: mimeTypes[ext] || 'audio/webm', filename: `audio${ext}` };
 }
+
+/**
+ * Fallback STT using Gemini Multimodal Audio understanding across any language.
+ * @param {Buffer} audioBuffer
+ * @param {string} mimeType
+ * @returns {Promise<string>}
+ */
+async function transcribeWithGeminiFallback(audioBuffer, mimeType = 'audio/wav') {
+  if (!ai) return '';
+  const models = ['gemini-flash-lite-latest', 'gemini-flash-latest'];
+  for (const model of models) {
+    try {
+      console.log(`[VoiceService STT Fallback] Trying Gemini model: ${model}`);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Gemini STT timeout')), 10000)
+      );
+
+      const apiCall = ai.models.generateContent({
+        model,
+        contents: [
+          {
+            inlineData: {
+              mimeType: mimeType || 'audio/wav',
+              data: audioBuffer.toString('base64'),
+            },
+          },
+          {
+            text: 'Listen carefully to this spoken audio. Transcribe the exact words spoken accurately in the speaker’s language (whether spoken in Odia, English, Hindi, Bengali, or any other language/dialect). Output ONLY the transcribed text without quotes or explanations.',
+          },
+        ],
+      });
+
+      const response = await Promise.race([apiCall, timeoutPromise]);
+      const text = response?.text?.trim();
+      if (text) {
+        console.log(`[VoiceService STT Fallback] Gemini transcribed: "${text.substring(0, 60)}..."`);
+        return text;
+      }
+    } catch (err) {
+      console.warn(`[VoiceService STT Fallback] Model ${model} failed: ${err.message}`);
+    }
+  }
+  return '';
+}
+
+/**
+ * Transcribe an audio buffer in ANY language using MultiSTTService (Preprocessing + Sarvam + Gemini Multimodal Fallback).
+ * @param {Buffer} audioBuffer - Raw audio file buffer
+ * @param {string} filename - Original filename
+ * @returns {Promise<string>} - Transcribed text
+ */
+async function transcribeAudio(audioBuffer, filename) {
+  console.log(`[VoiceService STT] Transcribing audio buffer of size ${audioBuffer?.length} bytes (name: ${filename})`);
+
+  if (!audioBuffer || audioBuffer.length === 0) {
+    throw new Error('Audio buffer is empty.');
+  }
+
+  const multiSTTService = require('./multiSTTService');
+  const result = await multiSTTService.transcribeWithFallback(audioBuffer);
+
+  if (result.success && result.transcript) {
+    console.log(`[VoiceService STT] Final transcription (${result.engine}): "${result.transcript.substring(0, 80)}..."`);
+    return result.transcript.trim();
+  }
+
+  throw new Error(result.error || 'Failed to transcribe audio.');
+}
+
 
 /**
  * Generate Odia speech audio using Sarvam AI Bulbul TTS.
  * @param {string} text - Odia text to convert to speech
+ * @param {string} [speaker='anushka'] - Speaker voice
  * @returns {Promise<string>} - Public URL path to the generated audio file
  */
-async function generateSpeech(text) {
+async function generateSpeech(text, speaker = 'anushka') {
   console.log(`[VoiceService TTS] Generating speech for: "${text.substring(0, 60)}..."`);
 
   if (!SARVAM_API_KEY) {
     throw new Error('SARVAM_API_KEY is not configured in .env');
   }
 
+  // Clean and prepare text for TTS
+  const cleanText = text.replace(/[*#_`~]/g, '').trim().substring(0, 500);
+
   const response = await axios.post(
     'https://api.sarvam.ai/text-to-speech',
     {
-      inputs: [text.substring(0, 500)], // Sarvam TTS max ~500 chars per request
-      target_language_code: 'or-IN',
-      speaker: 'meera',
+      inputs: [cleanText],
+      target_language_code: 'od-IN',
+      speaker: speaker || 'anushka',
       pitch: 0,
       pace: 1.0,
       loudness: 1.5,
       speech_sample_rate: 22050,
       enable_preprocessing: true,
-      model: 'bulbul:v1',
+      model: 'bulbul:v2',
     },
     {
       headers: {
@@ -99,7 +175,6 @@ async function generateSpeech(text) {
     }
   );
 
-  // Sarvam returns base64-encoded audio in audios array
   const base64Audio = response.data?.audios?.[0];
   if (!base64Audio) {
     throw new Error('Sarvam TTS returned no audio data.');
@@ -118,4 +193,5 @@ async function generateSpeech(text) {
 module.exports = {
   transcribeAudio,
   generateSpeech,
+  detectAudioMimeAndExt,
 };

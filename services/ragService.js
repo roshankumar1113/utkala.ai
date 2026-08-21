@@ -13,11 +13,20 @@ const VECTOR_FALLBACK = path.join(__dirname, '..', 'data', 'vector_store_fallbac
 const NO_MATCH_MSG =
   'No explicit matching local state schema documents found in the primary vector cluster repository.';
 
+let cachedRecords = null;
+let lastLoadedTime = 0;
+
 /**
- * Load the local knowledge base (scraped data + vector fallback).
+ * Load the local knowledge base (scraped data + vector fallback) with in-memory caching.
  * @returns {Array} - Combined array of knowledge records
  */
 function loadKnowledgeBase() {
+  const now = Date.now();
+  // Cache for 60 seconds
+  if (cachedRecords && (now - lastLoadedTime < 60000)) {
+    return cachedRecords;
+  }
+
   const records = [];
 
   try {
@@ -46,6 +55,8 @@ function loadKnowledgeBase() {
     console.warn('[RAGService] Could not load vector_store_fallback.json:', err.message);
   }
 
+  cachedRecords = records;
+  lastLoadedTime = now;
   return records;
 }
 

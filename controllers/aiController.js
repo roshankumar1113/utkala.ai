@@ -52,11 +52,11 @@ const handleUtkalQuery = async (req, res) => {
 
     // 3. EXECUTE COGNITIVE BRAIN INFERENCE WITH MULTI-MODEL FALLBACK & TIMEOUT SAFEGUARDS
     const FALLBACK_MODELS = [
-      "gemini-2.5-flash-lite",
-      "gemini-2.5-flash",
       "gemini-flash-lite-latest",
       "gemini-flash-latest",
     ];
+
+
 
     let response;
     let lastError;

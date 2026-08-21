@@ -1,0 +1,25 @@
+{
+  "include": [
+    "python_rag"
+  ],
+  "exclude": [
+    "**/__pyrefly_virtual__/**",
+    "**/inmemory/**"
+  ],
+  "extraPaths": [
+    "C:\\Users\\kumar\\AppData\\Local\\Programs\\Python\\Python315\\Lib\\site-packages",
+    "python_rag"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "python_rag",
+      "extraPaths": [
+        "C:\\Users\\kumar\\AppData\\Local\\Programs\\Python\\Python315\\Lib\\site-packages",
+        "."
+      ]
+    }
+  ],
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportMissingTypeStubs": "none"
+}

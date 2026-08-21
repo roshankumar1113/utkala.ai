@@ -4,19 +4,29 @@ FastAPI server exposing RAG train / search / stats / PDF-upload endpoints.
 All routes are synchronous (compatible with Python 3.15 + sync psycopg2).
 """
 
+import sys
 import os
+
+_EXTRA_SITE = os.path.expanduser(r"~\AppData\Local\Programs\Python\Python315\Lib\site-packages")
+if os.path.exists(_EXTRA_SITE) and _EXTRA_SITE not in sys.path:
+    sys.path.insert(0, _EXTRA_SITE)
+
+_DIR = os.path.dirname(os.path.abspath(__file__))
+if _DIR not in sys.path:
+    sys.path.insert(0, _DIR)
+
 import logging
 import shutil
 import requests
 from typing import Dict, Any, Optional, List
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore
 
 # Load .env from this directory before importing anything that reads env vars
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi import FastAPI, File, UploadFile, HTTPException  # type: ignore
+from fastapi.middleware.cors import CORSMiddleware  # type: ignore
+from pydantic import BaseModel  # type: ignore
 
 from rag_pipeline import RAGPipeline
 from vector_store import VectorStore
@@ -369,7 +379,7 @@ async def upload_url(data: UrlInput):
 
 # ── dev entry-point ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import uvicorn
+    import uvicorn  # type: ignore
 
     uvicorn.run(
         "app:app",
