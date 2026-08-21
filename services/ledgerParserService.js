@@ -42,11 +42,11 @@ Output: {"action":"PAY_CASH","party":"ରଞ୍ଜନ","amount":300,"item":"N/A"
 
 // Working Gemini models — verified list only
 const FALLBACK_MODELS = [
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
   'gemini-flash-lite-latest',
   'gemini-flash-latest',
 ];
+
+
 
 /**
  * Analyse an Odia transaction text and return structured JSON.

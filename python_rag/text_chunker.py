@@ -7,7 +7,7 @@ Odia sentence boundary support (।), and overlap.
 import re
 import uuid
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class TextChunker:
         self.overlap = overlap
 
     # ── public API ───────────────────────────────────────────────────────────
-    def chunk(self, text: str, metadata: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    def chunk(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Chunk a plain text string. metadata is merged into every chunk."""
         if not text or not isinstance(text, str):
             return []

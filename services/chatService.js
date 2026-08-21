@@ -1,10 +1,14 @@
 /**
  * chatService.js
- * Universal Odia chat response generator using Gemini.
+ * Universal Odia chat response generator using Gemini with conversation memory,
+ * role-adaptation, flow continuity, and Odia transliteration handling.
  */
 
 require('dotenv').config();
 const { GoogleGenAI } = require('@google/genai');
+const sessionMemoryService = require('./sessionMemoryService');
+const transliterationService = require('./transliterationService');
+const ragService = require('./ragService');
 
 let ai;
 try {
@@ -14,46 +18,176 @@ try {
 }
 
 const SYSTEM_PROMPT = `
-You are Utkal.ai — a warm, helpful AI assistant for Odia-speaking people in Odisha.
-You help small shopkeepers, farmers, and citizens with:
-- Business ledger and transaction queries
-- Government schemes (Subhadra, KALIA, MSME, etc.)
-- General knowledge questions in Odia
+You are Utkal, an advanced, friendly, and ultra-intelligent Odia AI assistant (like ChatGPT & Gemini) for all Odia speakers worldwide.
+You understand and converse in fluent native Odia script (ଓଡ଼ିଆ ଭାଷା) with deep cultural warmth, precision, and broad intelligence—supporting students, farmers, shopkeepers, professionals, homemakers, children, and elders.
 
-RULES:
-1. Always reply in native Odia script (ଓଡ଼ିଆ).
-2. Be concise, friendly, and practical.
-3. If asked in English, still reply in Odia script but include a brief English summary at the end.
-4. Never invent government scheme details — only share verified information.
+### CONVERSATION MEMORY & PERSONALIZATION
+- You have access to conversation history and session memory.
+- ALWAYS reference previous context when relevant: "ଆମେ ଯାହା ଆଗେ ଆଲୋଚନା କରିଥିଲୁ..." (As we discussed earlier...)
+- Adapt your tone: respectful and clear for elders (ଆପଣ), encouraging and friendly for students/youth (ତୁମେ), practical and factual for farmers/shopkeepers.
+
+### MULTILINGUAL INPUT & UNIVERSAL ODIA RESPONSE (CRITICAL)
+- The user may speak or type in ANY language (English, Hindi, Odia, Bengali, Telugu, Sambalpuri, Hinglish, Transliterated Latin Odia, etc.).
+- You MUST understand their query completely regardless of the input language.
+- ALWAYS deliver your response in fluent, authentic, native Odia script (ଓଡ଼ିଆ ଭାଷା).
+- Never answer solely in English or Hindi unless explicitly requested; always prioritize rich native Odia script with helpful structured explanations.
+
+### RAG KNOWLEDGE GROUNDING & ACCURACY
+- When verified knowledge base records or scheme guidelines are provided in [VERIFIED ODIA KNOWLEDGE BASE / SCHEMES CONTEXT], strictly adhere to those facts.
+- Provide accurate numbers, criteria, steps, and document lists for government schemes (Subhadra, KALIA, BSKY, Ration card, etc.) and farming/agronomy guidelines.
+
+### OUTPUT FORMAT & RICH MARKDOWN
+- Use clean, modern Markdown:
+  - Clear bold headings (###)
+  - Bullet points and numbered steps (୧. ୨. ୩. or 1. 2. 3.)
+  - Tables for comparisons or fee/document checklists
+  - Code blocks or formulas where applicable
+  - Conversational, warm, and highly structured format
 `;
 
 const FALLBACK_MODELS = [
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
   'gemini-flash-lite-latest',
   'gemini-flash-latest',
 ];
 
+
+
 /**
- * Generate a universal Odia AI response for a user message.
- * @param {string} userMessage - The user's chat message
- * @returns {Promise<string>} - AI-generated Odia response text
+ * Format conversation history & session context for Gemini API.
+ * @param {Array} history - Array of { role: 'user'|'model'|'assistant', text: string }
+ * @param {string} currentMessage - Latest user message
+ * @param {Object} [session] - Active session object
+ * @param {string} [ragContext] - Injected RAG context
+ * @param {Object} [imageData] - Optional { mimeType, base64 }
+ * @returns {Array}
  */
-async function generateUniversalResponse(userMessage) {
+function buildContentsPayload(history, currentMessage, session = {}, ragContext = '', imageData = null) {
+  let contextPrefix = '';
+  const contextParts = [];
+
+  if (session && Object.keys(session).length > 0) {
+    if (session.userRole) contextParts.push(`User Role: ${session.userRole}`);
+    if (session.userAgeGroup) contextParts.push(`User Age Group: ${session.userAgeGroup}`);
+    if (session.languagePreference) contextParts.push(`Language Preference: ${session.languagePreference}`);
+    if (session.mentionedInterests && session.mentionedInterests.length > 0) {
+      contextParts.push(`Interests: ${session.mentionedInterests.join(', ')}`);
+    }
+    if (session.mentionedProblems && session.mentionedProblems.length > 0) {
+      contextParts.push(`Problems: ${session.mentionedProblems.join(', ')}`);
+    }
+  }
+
+  if (ragContext && ragContext.trim().length > 0 && !ragContext.includes('No explicit matching local state schema documents')) {
+    contextParts.push(`\n[VERIFIED ODIA KNOWLEDGE BASE / SCHEMES CONTEXT]:\n${ragContext}`);
+  }
+
+  if (contextParts.length > 0) {
+    contextPrefix = `[Context Information: ${contextParts.join(' | ')}]\n\n`;
+  }
+
+  const contents = [];
+
+  if (Array.isArray(history) && history.length > 0) {
+    const recentHistory = history.slice(-15);
+    for (const item of recentHistory) {
+      const role = item.role === 'model' || item.role === 'assistant' ? 'model' : 'user';
+      const text = item.text || item.content || item.message || '';
+      if (text) {
+        contents.push({
+          role,
+          parts: [{ text }],
+        });
+      }
+    }
+  }
+
+  const currentParts = [];
+  if (imageData && imageData.base64 && imageData.mimeType) {
+    currentParts.push({
+      inlineData: {
+        mimeType: imageData.mimeType,
+        data: imageData.base64,
+      },
+    });
+  }
+
+  const fullUserText = contextPrefix ? `${contextPrefix}${currentMessage}` : currentMessage;
+  currentParts.push({ text: fullUserText });
+
+  contents.push({
+    role: 'user',
+    parts: currentParts,
+  });
+
+  return contents;
+}
+
+/**
+ * Generate a universal Odia AI response with RAG grounding, memory, transliteration, and multimodal support.
+ * @param {string} userMessage - The user's chat message
+ * @param {Array|string} [historyOrSessionId] - Conversation history array OR sessionId
+ * @param {Object} [sessionData] - Session memory override
+ * @param {Object} [options] - Optional { image: { mimeType, base64 }, useRag: boolean }
+ * @returns {Promise<Object>} - { response, sessionId, transliteration, ragSources, session }
+ */
+async function generateUniversalResponse(userMessage, historyOrSessionId = [], sessionData = {}, options = {}) {
   if (!ai) throw new Error('Google GenAI SDK not initialized. Check GEMINI_API_KEY.');
+
+  let sessionId = typeof historyOrSessionId === 'string' ? historyOrSessionId : sessionData.sessionId;
+  let session = sessionMemoryService.getOrCreateSession(sessionId, sessionData);
+  sessionId = session.sessionId;
+
+  // Check transliteration
+  const transliterationInfo = await transliterationService.detectAndClarifyTransliteration(userMessage);
+  let effectiveMessage = userMessage;
+
+  if (transliterationInfo.isTransliterated && transliterationInfo.convertedScript) {
+    session.languagePreference = 'transliterated';
+    effectiveMessage = transliterationInfo.convertedScript;
+  } else if (transliterationService.isNativeOdiaScript(userMessage)) {
+    session.languagePreference = 'native_odia';
+  }
+
+  // 1. RAG Knowledge Retrieval
+  let ragContext = '';
+  let ragSources = [];
+  try {
+    if (options.useRag !== false) {
+      ragContext = ragService.retrieveContext(effectiveMessage);
+      if (ragContext && !ragContext.includes('No explicit matching local state schema documents')) {
+        // Extract titles for citations
+        const matches = ragContext.match(/Title:\s*(.+)/g);
+        if (matches) {
+          ragSources = matches.map(m => m.replace(/Title:\s*/, '').trim());
+        }
+      }
+    }
+  } catch (ragErr) {
+    console.warn('[ChatService RAG] Retrieval warn:', ragErr.message);
+  }
+
+  // Record user message
+  sessionMemoryService.recordMessage(sessionId, 'user', userMessage);
+
+  // Get recent 15 history items from session
+  const history = Array.isArray(historyOrSessionId) && historyOrSessionId.length > 0
+    ? historyOrSessionId
+    : sessionMemoryService.getRecentHistory(sessionId, 15);
+
+  const contents = buildContentsPayload(history, effectiveMessage, session, ragContext, options.image);
 
   let lastError;
   for (const model of FALLBACK_MODELS) {
     try {
-      console.log(`[ChatService] Trying model: ${model}`);
+      console.log(`[ChatService] Generating with model ${model} for session ${sessionId}...`);
 
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Chat request timed out')), 15000)
+        setTimeout(() => reject(new Error('Chat request timed out')), 18000)
       );
 
       const apiCall = ai.models.generateContent({
         model,
-        contents: userMessage,
+        contents,
         config: {
           systemInstruction: SYSTEM_PROMPT,
           temperature: 0.7,
@@ -64,8 +198,24 @@ async function generateUniversalResponse(userMessage) {
       const text = response?.text?.trim();
 
       if (text) {
-        console.log(`[ChatService] Response from ${model} (${text.length} chars)`);
-        return text;
+        // Record assistant message
+        sessionMemoryService.recordMessage(sessionId, 'assistant', text);
+        console.log(`[ChatService] Response generated (${text.length} chars)`);
+
+        return {
+          response: text,
+          sessionId,
+          transliteration: transliterationInfo,
+          ragSources: ragSources.length > 0 ? ragSources : (ragContext.length > 30 ? ['Utkal Verified Knowledge Base'] : []),
+          ragContextUsed: Boolean(ragSources.length > 0 || (ragContext && !ragContext.includes('No explicit matching'))),
+          session: {
+            userRole: session.userRole,
+            userAgeGroup: session.userAgeGroup,
+            languagePreference: session.languagePreference,
+            mentionedInterests: session.mentionedInterests,
+            mentionedProblems: session.mentionedProblems,
+          },
+        };
       }
     } catch (err) {
       lastError = err;
@@ -76,6 +226,27 @@ async function generateUniversalResponse(userMessage) {
   throw lastError || new Error('All Gemini models failed to respond.');
 }
 
+/**
+ * Standard question-answering adapter for Voice Chat and RAG integration.
+ * @param {string} question - The user's question
+ * @param {string} [userIdOrSessionId] - Optional user/session ID
+ * @returns {Promise<Object>} - { answer, sources, sessionId }
+ */
+async function answerQuestion(question, userIdOrSessionId) {
+  const result = await generateUniversalResponse(question, userIdOrSessionId || 'default-session');
+  return {
+    answer: result.response,
+    sources: result.ragSources || [],
+    sessionId: result.sessionId,
+    transliteration: result.transliteration,
+  };
+}
+
 module.exports = {
+  SYSTEM_PROMPT,
   generateUniversalResponse,
+  answerQuestion,
+  sessionMemoryService,
+  transliterationService,
 };
+

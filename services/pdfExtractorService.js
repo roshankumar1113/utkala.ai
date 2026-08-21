@@ -38,29 +38,51 @@ class PDFExtractor {
 
     try {
       const dataBuffer = fs.readFileSync(pdfPath);
-      const data = await pdfParse(dataBuffer);
+      let text = '';
+      let numpages = 1;
+      let info = {};
 
-      let text = (data.text || '').trim();
+      if (typeof pdfParse === 'function') {
+        const data = await pdfParse(dataBuffer);
+        text = (data.text || '').trim();
+        numpages = data.numpages || 1;
+        info = data.info || {};
+      } else {
+        const ParserClass = pdfParse.PDFParse || pdfParse.default;
+        if (ParserClass) {
+          const parser = new ParserClass({ data: dataBuffer });
+          const textRes = await parser.getText();
+          text = typeof textRes === 'string' ? textRes.trim() : (textRes?.text || '').trim();
+          numpages = textRes?.total || 1;
+          try {
+            if (typeof parser.getInfo === 'function') {
+              info = await parser.getInfo();
+            }
+          } catch (_) {}
+        } else {
+          throw new Error('Unrecognized pdf-parse export format');
+        }
+      }
+
       let isTruncated = false;
-
       if (text.length > this.maxCharLength) {
         text = text.slice(0, this.maxCharLength) + '\n\n[TRUNCATED]';
         isTruncated = true;
       }
 
       const metadata = {
-        title: (data.info?.Title || path.parse(filename).name).trim(),
-        author: (data.info?.Author || 'Unknown').trim(),
+        title: (info?.Title || path.parse(filename).name).trim(),
+        author: (info?.Author || 'Unknown').trim(),
         source: 'PDF',
         language: this.defaultLanguage,
       };
 
-      console.log(`[PDFExtractor] Extracted "${filename}" (${data.numpages} pages, ${text.length} chars)`);
+      console.log(`[PDFExtractor] Extracted "${filename}" (${numpages} pages, ${text.length} chars)`);
 
       return {
         success: true,
         filename,
-        pages: data.numpages || 1,
+        pages: numpages || 1,
         text,
         metadata,
         isTruncated,

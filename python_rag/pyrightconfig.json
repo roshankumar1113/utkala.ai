@@ -1,0 +1,9 @@
+{
+  "extraPaths": [
+    "C:\\Users\\kumar\\AppData\\Local\\Programs\\Python\\Python315\\Lib\\site-packages",
+    "."
+  ],
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportMissingTypeStubs": "none"
+}
