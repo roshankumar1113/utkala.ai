@@ -184,7 +184,7 @@ module.exports = (io) => {
         while (ttsQueue.length && !abort.signal.aborted && turn === state.turnSeq) {
           const text = ttsQueue.shift();
           try {
-            const { audioBase64, contentType } = await voiceService.synthesizeChunk(text, { speaker: 'anushka' });
+            const { audioBase64, contentType } = await voiceService.synthesizeChunk(text, { speaker: 'priya' });
             if (abort.signal.aborted || turn !== state.turnSeq) break;
             if (!ttsStarted) { ttsStarted = true; socket.emit('tts:start', {}); metrics.mark('ttsFirstAudio'); }
             socket.emit('tts:audio', { audio: audioBase64, contentType });

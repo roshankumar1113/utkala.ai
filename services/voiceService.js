@@ -10,7 +10,8 @@ const fs = require('fs');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 
-const SARVAM_API_KEY = process.env.SARVAM_API_KEY;
+// Dedicated TTS key if provided, else the shared Sarvam key.
+const SARVAM_API_KEY = process.env.SARVAM_TTS_API_KEY || process.env.SARVAM_API_KEY;
 const PUBLIC_OUTPUTS_DIR = path.join(__dirname, '..', 'public', 'outputs');
 
 // Ensure output dir exists
@@ -144,10 +145,10 @@ async function transcribeAudio(audioBuffer, filename, options = {}) {
 /**
  * Generate Odia speech audio using Sarvam AI Bulbul TTS.
  * @param {string} text - Odia text to convert to speech
- * @param {string} [speaker='anushka'] - Speaker voice
+ * @param {string} [speaker='priya'] - Speaker voice
  * @returns {Promise<string>} - Public URL path to the generated audio file
  */
-async function generateSpeech(text, speaker = 'anushka') {
+async function generateSpeech(text, speaker = 'priya') {
   console.log(`[VoiceService TTS] Generating speech for: "${text.substring(0, 60)}..."`);
 
   if (!SARVAM_API_KEY) {
@@ -162,13 +163,11 @@ async function generateSpeech(text, speaker = 'anushka') {
     {
       inputs: [cleanText],
       target_language_code: 'od-IN',
-      speaker: speaker || 'anushka',
-      pitch: 0,
+      speaker: speaker || 'priya',
       pace: 1.0,
-      loudness: 1.5,
       speech_sample_rate: 22050,
       enable_preprocessing: true,
-      model: 'bulbul:v2',
+      model: 'bulbul:v3',
     },
     {
       headers: {
@@ -212,13 +211,11 @@ async function synthesizeChunk(text, opts = {}) {
     {
       inputs: [cleanText],
       target_language_code: 'od-IN',
-      speaker: opts.speaker || 'anushka',
-      pitch: opts.pitch ?? 0,
+      speaker: opts.speaker || 'priya',
       pace: opts.pace ?? 1.0,
-      loudness: 1.5,
       speech_sample_rate: 22050,
       enable_preprocessing: true,
-      model: 'bulbul:v2',
+      model: 'bulbul:v3',
     },
     {
       headers: { 'Content-Type': 'application/json', 'api-subscription-key': SARVAM_API_KEY },
