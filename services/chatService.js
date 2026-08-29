@@ -242,9 +242,91 @@ async function answerQuestion(question, userIdOrSessionId) {
   };
 }
 
+/**
+ * Streaming variant of generateUniversalResponse. Preserves RAG grounding,
+ * session memory, transliteration and persona, but yields text deltas as they
+ * arrive so callers can start TTS before the full answer is ready.
+ *
+ * @param {string} userMessage
+ * @param {Object} [opts]
+ * @param {string} [opts.sessionId]
+ * @param {Object} [opts.sessionData]
+ * @param {boolean} [opts.useRag=true]
+ * @param {AbortSignal} [opts.signal] - abort to cancel obsolete generation (barge-in)
+ * @param {(delta: string) => void} [opts.onDelta]
+ * @returns {Promise<{ response, sessionId, ragSources, transliteration, aborted }>}
+ */
+async function generateUniversalResponseStream(userMessage, opts = {}) {
+  if (!ai) throw new Error('Google GenAI SDK not initialized. Check GEMINI_API_KEY.');
+
+  const { signal, onDelta } = opts;
+  let session = sessionMemoryService.getOrCreateSession(opts.sessionId, opts.sessionData || {});
+  const sessionId = session.sessionId;
+
+  const transliterationInfo = await transliterationService.detectAndClarifyTransliteration(userMessage);
+  let effectiveMessage = userMessage;
+  if (transliterationInfo.isTransliterated && transliterationInfo.convertedScript) {
+    session.languagePreference = 'transliterated';
+    effectiveMessage = transliterationInfo.convertedScript;
+  } else if (transliterationService.isNativeOdiaScript(userMessage)) {
+    session.languagePreference = 'native_odia';
+  }
+
+  let ragContext = '';
+  let ragSources = [];
+  try {
+    if (opts.useRag !== false) {
+      ragContext = ragService.retrieveContext(effectiveMessage) || '';
+      const matches = ragContext.match(/Title:\s*(.+)/g);
+      if (matches) ragSources = matches.map((m) => m.replace(/Title:\s*/, '').trim());
+    }
+  } catch (e) {
+    console.warn('[ChatService Stream RAG] warn:', e.message);
+  }
+
+  sessionMemoryService.recordMessage(sessionId, 'user', userMessage);
+  const history = sessionMemoryService.getRecentHistory(sessionId, 15);
+  const contents = buildContentsPayload(history, effectiveMessage, session, ragContext, null);
+
+  let lastError;
+  for (const model of FALLBACK_MODELS) {
+    try {
+      if (signal?.aborted) return { response: '', sessionId, ragSources, transliteration: transliterationInfo, aborted: true };
+
+      const stream = await ai.models.generateContentStream({
+        model,
+        contents,
+        config: { systemInstruction: SYSTEM_PROMPT, temperature: 0.7 },
+      });
+
+      let full = '';
+      for await (const chunk of stream) {
+        if (signal?.aborted) {
+          return { response: full, sessionId, ragSources, transliteration: transliterationInfo, aborted: true };
+        }
+        const delta = chunk?.text || '';
+        if (delta) {
+          full += delta;
+          if (onDelta) onDelta(delta);
+        }
+      }
+
+      if (full.trim()) {
+        sessionMemoryService.recordMessage(sessionId, 'assistant', full);
+        return { response: full, sessionId, ragSources, transliteration: transliterationInfo, aborted: false };
+      }
+    } catch (err) {
+      lastError = err;
+      console.warn(`[ChatService Stream] Model ${model} failed: ${err.message}`);
+    }
+  }
+  throw lastError || new Error('All Gemini models failed to stream.');
+}
+
 module.exports = {
   SYSTEM_PROMPT,
   generateUniversalResponse,
+  generateUniversalResponseStream,
   answerQuestion,
   sessionMemoryService,
   transliterationService,

@@ -1,5 +1,6 @@
 const voiceService = require('../services/voiceService');
 const ledgerParserService = require('../services/ledgerParserService');
+const ledgerValidationService = require('../services/ledgerValidationService');
 
 /**
  * Helper to dynamically generate a natural and grammatically correct Odia confirmation sentence
@@ -94,54 +95,45 @@ async function processVoice(req, res) {
 
     console.log(`[Pipeline] File received: ${req.file.originalname} (${req.file.mimetype}), Size: ${req.file.size} bytes`);
 
+    // Voice mode: MODE A (od-IN, default) or MODE B (auto). Never auto-detect
+    // when the user explicitly selected Odia.
+    const languageMode = (req.body?.languageMode === 'auto') ? 'auto' : 'od-IN';
+
     // --- STEP A: Speech-to-Text (Transcribe spoken Odia audio) ---
+    // STT failure is terminal: we do NOT invent a transcript and do NOT run the
+    // ledger parser or chat engine on fabricated text (financial safety).
     let transcribedText;
     try {
-      transcribedText = await voiceService.transcribeAudio(req.file.buffer, req.file.originalname);
+      transcribedText = await voiceService.transcribeAudio(req.file.buffer, req.file.originalname, { languageMode });
     } catch (sttError) {
-      console.error('[Pipeline] Step A (STT) Failed gracefully caught:', sttError.message);
+      console.error('[Pipeline] Step A (STT) failed:', sttError.errorCode || 'STT_FAILED', sttError.message);
+      const isQuota = sttError.errorCode === 'PROVIDER_QUOTA';
       return res.status(200).json({
-        success: true,
-        fallback_to_text: true,
-        transcription: 'କଣ୍ଠସ୍ୱର ଚିହ୍ନଟ ହୋଇପାରିଲା ନାହିଁ।',
-        transaction: {
-          action: 'UNKNOWN',
-          party: 'N/A',
-          amount: 0,
-          item: 'N/A',
-          payment_type: 'UNKNOWN'
-        },
-        confirmationText: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ସମସ୍ୟା ହେତୁ କଣ୍ଠସ୍ୱର ଚିହ୍ନଟ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଲେଖନ୍ତୁ ।',
-        audioUrl: null,
-        notice: 'କ୍ଷମା କରିବେ, ନେଟୱର୍କ ବିଳମ୍ବ ହେତୁ ଆପଣଙ୍କ କଣ୍ଠସ୍ୱର ସଂଯୋଗ ହୋଇପାରିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଲେଖନ୍ତୁ ଏବଂ ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ ।'
+        success: false,
+        error_code: sttError.errorCode || 'STT_FAILED',
+        transcription: '',
+        message: isQuota
+          ? 'ସେବା ବର୍ତ୍ତମାନ ବ୍ୟସ୍ତ ଅଛି। ଦୟାକରି କିଛି ସମୟ ପରେ ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ।'
+          : 'ମୁଁ ଠିକ୍ ଭାବରେ ଶୁଣିପାରିଲି ନାହିଁ। ଦୟାକରି ପୁଣିଥରେ କୁହନ୍ତୁ।',
       });
     }
 
-    // Edge case: Transcription succeeded but returned empty text
+    // Edge case: Transcription "succeeded" but returned empty text.
     if (!transcribedText || transcribedText.trim() === '') {
-      console.warn('[Pipeline] Step A succeeded but transcription text is empty.');
+      console.warn('[Pipeline] Step A returned empty transcript.');
       return res.status(200).json({
-        success: true,
-        fallback_to_text: true,
-        transcription: 'ଖାଲି ସ୍ୱର।',
-        transaction: {
-          action: 'UNKNOWN',
-          party: 'N/A',
-          amount: 0,
-          item: 'N/A',
-          payment_type: 'UNKNOWN'
-        },
-        confirmationText: 'ଆପଣଙ୍କ ସ୍ୱର ସ୍ପଷ୍ଟ ଶୁଭିଲା ନାହିଁ। ଦୟାକରି ପୁଣିଥରେ ସ୍ପଷ୍ଟ ଭାବରେ କୁହନ୍ତୁ କିମ୍ବା ଟେକ୍ସଟ୍ ମାଧ୍ୟମରେ ଲେଖନ୍ତୁ ।',
-        audioUrl: null,
-        notice: 'ଆପଣଙ୍କ ସ୍ୱର ସ୍ପଷ୍ଟ ଶୁଭିଲା ନାହିଁ । ଦୟାକରି ଟେକ୍ସଟ୍ (Text) ମାଧ୍ୟମରେ ଲେଖନ୍ତୁ କିମ୍ବା ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ ।'
+        success: false,
+        error_code: 'STT_EMPTY',
+        transcription: '',
+        message: 'ଆପଣଙ୍କ ସ୍ୱର ସ୍ପଷ୍ଟ ଶୁଭିଲା ନାହିଁ। ଦୟାକରି ପୁଣିଥରେ ସ୍ପଷ୍ଟ ଭାବରେ କୁହନ୍ତୁ।',
       });
     }
 
     // --- STEP B: AI Brain & JSON Extraction (Parse Odia text via Ledger Parser) ---
     const chatService = require('../services/chatService');
-    const agentType = req.body?.agentType || 'general';
     let transactionJSON = { action: 'UNKNOWN', party: 'N/A', amount: 0, item: 'N/A', payment_type: 'UNKNOWN' };
     let isLedger = false;
+    let ledgerValidation = null;
 
     try {
       transactionJSON = await ledgerParserService.analyzeTransaction(transcribedText);
@@ -152,15 +144,49 @@ async function processVoice(req, res) {
       console.warn('[Pipeline] Ledger Parser check notice:', geminiError.message);
     }
 
-    // --- STEP C: Formulate Odia Response (Ledger confirmation OR Conversational Answer) ---
+    // --- STEP B2: LEDGER SAFETY — validate before ANY confirmation/save ---
+    // We NEVER auto-save and NEVER guess missing financial values. If the
+    // transaction is incomplete/ambiguous, ask the user a clarifying question.
+    if (isLedger) {
+      ledgerValidation = ledgerValidationService.validateTransaction(transactionJSON);
+
+      if (!ledgerValidation.valid) {
+        const clarifyText = ledgerValidation.clarification;
+        let audioUrl = null;
+        try { audioUrl = await voiceService.generateSpeech(clarifyText); } catch (_) {}
+        return res.status(200).json({
+          success: true,
+          requiresClarification: true,
+          isLedger: true,
+          transcription: transcribedText,
+          transaction: ledgerValidation.normalized,
+          missing: ledgerValidation.missing,
+          confirmationText: clarifyText,
+          audioUrl,
+          fallback_to_text: !audioUrl,
+        });
+      }
+
+      // Valid but must still be CONFIRMED by the user before persistence.
+      const confirmationText = generateOdiaConfirmationText(ledgerValidation.normalized);
+      let audioUrl = null;
+      try { audioUrl = await voiceService.generateSpeech(confirmationText); } catch (_) {}
+      return res.status(200).json({
+        success: true,
+        requiresConfirmation: true,
+        isLedger: true,
+        transcription: transcribedText,
+        transaction: ledgerValidation.normalized,
+        confirmationText,
+        audioUrl,
+        fallback_to_text: !audioUrl,
+      });
+    }
+
+    // --- STEP C: Conversational query / RAG scheme lookup (non-ledger) ---
     let confirmationText = '';
     let aiAnswer = '';
-
-    if (isLedger) {
-      confirmationText = generateOdiaConfirmationText(transactionJSON);
-      console.log(`[Pipeline] Formulated ledger confirmation text: "${confirmationText}"`);
-    } else {
-      // Conversational query / RAG scheme lookup
+    {
       try {
         console.log(`[Pipeline] Processing conversational voice query: "${transcribedText}"`);
         const chatRes = await chatService.generateUniversalResponse(transcribedText);
