@@ -261,7 +261,7 @@ async function textToSpeech(req, res) {
       audioUrl: audioUrl
     });
   } catch (error) {
-    console.error('[Server TTS] Generation error gracefully caught:', error.message);
+    console.error('[Server TTS] Generation error gracefully caught:', error.message, '| body:', JSON.stringify(error.response?.data || {}));
     return res.status(200).json({
       success: true,
       audioUrl: null,
