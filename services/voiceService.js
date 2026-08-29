@@ -118,22 +118,26 @@ async function transcribeWithGeminiFallback(audioBuffer, mimeType = 'audio/wav')
  * @param {string} filename - Original filename
  * @returns {Promise<string>} - Transcribed text
  */
-async function transcribeAudio(audioBuffer, filename) {
+async function transcribeAudio(audioBuffer, filename, options = {}) {
   console.log(`[VoiceService STT] Transcribing audio buffer of size ${audioBuffer?.length} bytes (name: ${filename})`);
 
   if (!audioBuffer || audioBuffer.length === 0) {
-    throw new Error('Audio buffer is empty.');
+    const e = new Error('Audio buffer is empty.');
+    e.errorCode = 'EMPTY_AUDIO';
+    throw e;
   }
 
   const multiSTTService = require('./multiSTTService');
-  const result = await multiSTTService.transcribeWithFallback(audioBuffer);
+  const result = await multiSTTService.transcribeWithFallback(audioBuffer, options);
 
   if (result.success && result.transcript) {
     console.log(`[VoiceService STT] Final transcription (${result.engine}): "${result.transcript.substring(0, 80)}..."`);
     return result.transcript.trim();
   }
 
-  throw new Error(result.error || 'Failed to transcribe audio.');
+  const e = new Error(result.error || 'Failed to transcribe audio.');
+  e.errorCode = result.errorCode || 'STT_FAILED';
+  throw e;
 }
 
 
@@ -190,8 +194,46 @@ async function generateSpeech(text, speaker = 'anushka') {
   return `/outputs/${filename}`;
 }
 
+/**
+ * Synthesize a single text chunk to base64 WAV (for realtime socket streaming).
+ * Unlike generateSpeech(), this does NOT write a file — it returns the audio
+ * inline so the client audio queue can play it immediately.
+ * @param {string} text
+ * @param {Object} [opts] - { speaker, pace, pitch }
+ * @returns {Promise<{ audioBase64: string, contentType: string }>}
+ */
+async function synthesizeChunk(text, opts = {}) {
+  if (!SARVAM_API_KEY) throw new Error('SARVAM_API_KEY is not configured in .env');
+  const cleanText = String(text).replace(/[*#_`~]/g, '').trim().substring(0, 500);
+  if (!cleanText) throw new Error('Empty TTS chunk');
+
+  const response = await axios.post(
+    'https://api.sarvam.ai/text-to-speech',
+    {
+      inputs: [cleanText],
+      target_language_code: 'od-IN',
+      speaker: opts.speaker || 'anushka',
+      pitch: opts.pitch ?? 0,
+      pace: opts.pace ?? 1.0,
+      loudness: 1.5,
+      speech_sample_rate: 22050,
+      enable_preprocessing: true,
+      model: 'bulbul:v2',
+    },
+    {
+      headers: { 'Content-Type': 'application/json', 'api-subscription-key': SARVAM_API_KEY },
+      timeout: 30000,
+    }
+  );
+
+  const base64Audio = response.data?.audios?.[0];
+  if (!base64Audio) throw new Error('Sarvam TTS returned no audio data.');
+  return { audioBase64: base64Audio, contentType: 'audio/wav' };
+}
+
 module.exports = {
   transcribeAudio,
   generateSpeech,
+  synthesizeChunk,
   detectAudioMimeAndExt,
 };

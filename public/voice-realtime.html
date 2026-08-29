@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="or">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Utkal.ai — Voice 2.0 (ଓଡ଼ିଆ)</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    :root {
+      --navy: #0b1437; --navy2: #141d4a; --copper: #d98a3d; --gold: #f2c14e;
+      --cyan: #38e1e1; --ink: #e8ecff; --muted: #9aa4d6; --danger: #ff6b6b;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; min-height: 100vh; font-family: 'Segoe UI', 'Noto Sans Oriya', system-ui, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #1c2a6b 0%, var(--navy) 55%, #060a1f 100%);
+      color: var(--ink); display: flex; flex-direction: column; align-items: center;
+      justify-content: space-between; padding: 24px 16px; overflow: hidden;
+    }
+    header { text-align: center; margin-top: 8px; }
+    header h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+    header .brand { color: var(--gold); }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+
+    .mode-toggle { display: flex; gap: 8px; margin-top: 14px; }
+    .mode-toggle button {
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+      color: var(--ink); padding: 6px 14px; border-radius: 999px; font-size: 13px; cursor: pointer;
+    }
+    .mode-toggle button.active { background: linear-gradient(135deg, var(--copper), var(--gold)); color: #1a1200; border-color: transparent; font-weight: 600; }
+
+    .stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; max-width: 520px; }
+    .status { font-size: 15px; color: var(--cyan); min-height: 22px; margin-bottom: 10px; text-align: center; }
+    .transcript {
+      width: 100%; min-height: 56px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+      border-radius: 16px; padding: 14px 16px; font-size: 18px; line-height: 1.5; text-align: center;
+      backdrop-filter: blur(8px); margin-bottom: 14px;
+    }
+    .transcript .partial { color: var(--muted); }
+    .answer {
+      width: 100%; background: rgba(56,225,225,.06); border: 1px solid rgba(56,225,225,.18);
+      border-radius: 16px; padding: 14px 16px; font-size: 16px; line-height: 1.6; min-height: 20px;
+      white-space: pre-wrap; margin-bottom: 14px; display: none;
+    }
+    .ledger-card {
+      width: 100%; background: rgba(242,193,78,.08); border: 1px solid rgba(242,193,78,.35);
+      border-radius: 16px; padding: 16px; margin-bottom: 14px; display: none;
+    }
+    .ledger-card h3 { margin: 0 0 10px; color: var(--gold); font-size: 15px; }
+    .ledger-card .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 15px; }
+    .ledger-card .actions { display: flex; gap: 10px; margin-top: 12px; }
+    .ledger-card .actions button { flex: 1; padding: 10px; border-radius: 12px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .btn-confirm { background: linear-gradient(135deg, #2ecc71, #27ae60); color: #06210f; }
+    .btn-edit { background: rgba(255,255,255,.1); color: var(--ink); }
+
+    .mic-wrap { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
+    .mic-btn {
+      width: 110px; height: 110px; border-radius: 50%; border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--copper), var(--gold)); color: #1a1200;
+      font-size: 40px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 30px rgba(217,138,61,.4); transition: transform .15s ease;
+      position: relative;
+    }
+    .mic-btn:active { transform: scale(.94); }
+    .mic-btn.listening { background: linear-gradient(135deg, var(--cyan), #1fb6b6); color: #002020; }
+    .mic-btn.listening::before {
+      content: ''; position: absolute; inset: -10px; border-radius: 50%;
+      border: 3px solid var(--cyan); animation: pulse 1.4s infinite;
+    }
+    .mic-btn.speaking { background: linear-gradient(135deg, #7b5cff, #a06bff); color: #fff; }
+    @keyframes pulse { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(1.5); opacity: 0; } }
+    .mic-hint { margin-top: 12px; color: var(--muted); font-size: 14px; }
+    .stop-btn {
+      margin-top: 14px; background: rgba(255,107,107,.15); border: 1px solid rgba(255,107,107,.4);
+      color: #ffb3b3; padding: 8px 20px; border-radius: 999px; font-size: 14px; cursor: pointer; display: none;
+    }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(20,29,74,.95); border: 1px solid rgba(255,255,255,.15); color: var(--ink);
+      padding: 10px 18px; border-radius: 12px; font-size: 14px; max-width: 90%; text-align: center;
+      opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 50;
+    }
+    .toast.show { opacity: 1; }
+    footer { color: var(--muted); font-size: 11px; text-align: center; margin-top: 8px; }
+    footer a { color: var(--cyan); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span class="brand">Utkal.ai</span> — Voice 2.0</h1>
+    <p>ଓଡ଼ିଆରେ କୁହନ୍ତୁ — ଉତ୍କଳ ଶୁଣିବ, ବୁଝିବ ଏବଂ ଉତ୍ତର ଦେବ</p>
+    <div class="mode-toggle">
+      <button id="modeOdia" class="active" onclick="setMode('od-IN')">ଓଡ଼ିଆ Voice</button>
+      <button id="modeAuto" onclick="setMode('auto')">Auto Language</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <div class="status" id="status">କହିବା ପାଇଁ ମାଇକ୍ ଟ୍ୟାପ୍ କରନ୍ତୁ</div>
+    <div class="transcript" id="transcript" style="display:none"></div>
+    <div class="answer" id="answer"></div>
+    <div class="ledger-card" id="ledgerCard">
+      <h3 id="ledgerTitle">ଆପଣ କହିଛନ୍ତି:</h3>
+      <div id="ledgerRows"></div>
+      <div class="actions">
+        <button class="btn-confirm" onclick="confirmLedger()">✓ ନିଶ୍ଚିତ କରନ୍ତୁ</button>
+        <button class="btn-edit" onclick="editLedger()">✎ ସଂଶୋଧନ</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mic-wrap">
+    <button class="mic-btn" id="micBtn" aria-label="Speak to Utkal">🎙️</button>
+    <div class="mic-hint" id="micHint">Speak to Utkal</div>
+    <button class="stop-btn" id="stopBtn">⏹ ବନ୍ଦ କରନ୍ତୁ</button>
+  </div>
+
+  <footer>
+    Utkal.ai Voice 2.0 · realtime · <a href="/">← Dashboard (HTTP fallback)</a>
+  </footer>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="/js/realtime-voice.js"></script>
+  <script>
+    /* PLACEHOLDER_SCRIPT */
+    let languageMode = 'od-IN';
+    let currentTx = null;
+    const $ = (id) => document.getElementById(id);
+    const micBtn = $('micBtn'), status = $('status'), transcriptEl = $('transcript'),
+          answerEl = $('answer'), ledgerCard = $('ledgerCard'), stopBtn = $('stopBtn');
+
+    function setMode(m) {
+      languageMode = m;
+      $('modeOdia').classList.toggle('active', m === 'od-IN');
+      $('modeAuto').classList.toggle('active', m === 'auto');
+      if (rv) rv.languageMode = m;
+    }
+    function toast(msg) {
+      const t = $('toast'); t.textContent = msg; t.classList.add('show');
+      clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 3500);
+    }
+    function setState(s) {
+      micBtn.classList.remove('listening', 'speaking');
+      stopBtn.style.display = 'none';
+      if (s === 'listening') { micBtn.classList.add('listening'); micBtn.textContent = '🎙️'; status.textContent = '🎙️ ଶୁଣୁଛି... କୁହନ୍ତୁ'; stopBtn.style.display = 'inline-block'; }
+      else if (s === 'thinking') { micBtn.textContent = '🧠'; status.textContent = '🧠 ଉତ୍କଳ ଚିନ୍ତା କରୁଛି... ବିଶ୍ୱସ୍ତ ତଥ୍ୟ ଖୋଜୁଛି'; }
+      else if (s === 'speaking') { micBtn.classList.add('speaking'); micBtn.textContent = '🔊'; status.textContent = '🔊 ଉତ୍କଳ କହୁଛି...'; stopBtn.style.display = 'inline-block'; }
+      else if (s === 'interrupted') { micBtn.textContent = '🛑'; status.textContent = '🛑 ଉତ୍କଳ ବନ୍ଦ ହେଲା'; }
+      else { micBtn.textContent = '🎙️'; status.textContent = 'କହିବା ପାଇଁ ମାଇକ୍ ଟ୍ୟାପ୍ କରନ୍ତୁ'; }
+    }
+
+    const rv = new RealtimeVoice({
+      serverUrl: '', languageMode,
+      on: {
+        ready: () => console.log('[RT] ready'),
+        listening: () => setState('listening'),
+        thinking: () => setState('thinking'),
+        finalTranscript: (d) => { transcriptEl.style.display = 'block'; transcriptEl.textContent = d.text; },
+        textDelta: (d) => { answerEl.style.display = 'block'; answerEl.textContent += d.delta; },
+        textComplete: (d) => {
+          if (d.ledger) return showLedger(d);
+          answerEl.style.display = 'block'; answerEl.textContent = d.text;
+        },
+        speaking: () => setState('speaking'),
+        speakEnd: () => setState('idle'),
+        interrupted: () => setState('interrupted'),
+        stopped: (d) => { if (d.reason === 'interrupted') setState('idle'); },
+        error: (d) => {
+          toast(d.message || 'Voice error');
+          if (d.error_code === 'STT_FAILED' || d.error_code === 'STT_EMPTY') {
+            status.textContent = '🎙️ ଭଲ ଭାବରେ ଶୁଭିଲା ନାହିଁ। ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ।';
+          }
+          if (!d.soft) setState('idle');
+        },
+      },
+    });
+
+    function resetTurn() { transcriptEl.style.display = 'none'; transcriptEl.textContent = ''; answerEl.style.display = 'none'; answerEl.textContent = ''; ledgerCard.style.display = 'none'; }
+
+    micBtn.addEventListener('click', async () => {
+      if (rv.assistantSpeaking) { rv._interrupt(); return; }
+      if (rv.listening) { rv.stopListening(); return; }
+      resetTurn();
+      try { await rv.startListening(); }
+      catch (e) { toast('ମାଇକ୍ ଅନୁମତି ଆବଶ୍ୟକ: ' + e.message); setState('idle'); }
+    });
+    stopBtn.addEventListener('click', () => { if (rv.assistantSpeaking) rv._interrupt(); else rv.stopListening(); });
+
+    function showLedger(d) {
+      currentTx = d.ledger.transaction;
+      const t = currentTx;
+      $('ledgerTitle').textContent = d.ledger.requiresConfirmation ? 'ଆପଣ କହିଛନ୍ତି:' : '⚠️ ଅଧିକ ସୂଚନା ଆବଶ୍ୟକ';
+      $('ledgerRows').innerHTML =
+        (t.party ? `<div class="row"><span>👤 ଗ୍ରାହକ</span><b>${t.party}</b></div>` : '') +
+        (t.amount ? `<div class="row"><span>💰 ରାଶି</span><b>₹${t.amount.toLocaleString('en-IN')}</b></div>` : '') +
+        (t.item ? `<div class="row"><span>📦 ପଦାର୍ଥ</span><b>${t.item}</b></div>` : '') +
+        `<div class="row"><span>🧾 ପ୍ରକାର</span><b>${t.action} / ${t.payment_type}</b></div>` +
+        (d.ledger.requiresClarification ? `<div class="row" style="color:var(--gold)">${d.text}</div>` : '');
+      ledgerCard.style.display = 'block';
+      ledgerCard.querySelector('.actions').style.display = d.ledger.requiresConfirmation ? 'flex' : 'none';
+      setState('idle');
+    }
+    function confirmLedger() { toast('✅ କାରବାର ରେକର୍ଡ ହେଲା (demo — persistence pending)'); ledgerCard.style.display = 'none'; }
+    function editLedger() { toast('ସଂଶୋଧନ ପାଇଁ ପୁଣିଥରେ କୁହନ୍ତୁ'); ledgerCard.style.display = 'none'; }
+</script>
+</body>
+</html>
+

@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const voiceLedgerRoutes = require('./routes/voiceLedgerRoutes');
 const voiceChatSocket = require('./routes/voiceChatSocket');
+const realtimeVoiceSocket = require('./routes/realtimeVoiceSocket');
 const chatService = require('./services/chatService');
 const aiController = require('./controllers/aiController');
 
@@ -16,6 +17,9 @@ const PORT = process.env.PORT || 5000;
 // Initialize Socket.io Voice Chat
 const io = voiceChatSocket(server);
 app.set('io', io);
+
+// Initialize Utkal.ai Voice 2.0 realtime namespace (/rt-voice) alongside legacy handlers
+realtimeVoiceSocket(io);
 
 
 // Ensure public output directory exists for serving generated audio files

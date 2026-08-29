@@ -9,6 +9,8 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { GoogleGenAI } = require('@google/genai');
 const AudioPreprocessor = require('./audioPreprocessor');
+const sttValidation = require('./sttValidationService');
+const providerErrors = require('./providerErrors');
 
 const SARVAM_API_KEY = process.env.SARVAM_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -28,11 +30,16 @@ class MultiSTTService {
    * @param {Buffer} audioBuffer - 16kHz mono WAV
    * @returns {Promise<{ success: boolean, transcript: string, confidence: number }>}
    */
-  async transcribeWithSarvam(audioBuffer) {
+  async transcribeWithSarvam(audioBuffer, options = {}) {
     const apiKey = SARVAM_API_KEY || process.env.SARVAM_API_KEY;
     if (!apiKey) {
       return { success: false, error: 'SARVAM_API_KEY is not configured in .env' };
     }
+
+    // MODE A (od-IN): force Odia, never rely on auto-detect.
+    // MODE B (auto): let Sarvam detect (uses 'unknown').
+    const languageMode = options.languageMode === 'auto' ? 'auto' : 'od-IN';
+    const languageCode = languageMode === 'auto' ? 'unknown' : 'od-IN';
 
     try {
       const formData = new FormData();
@@ -41,7 +48,7 @@ class MultiSTTService {
         contentType: 'audio/wav',
       });
       formData.append('model', 'saarika:v2.5');
-      formData.append('language_code', 'od-IN');
+      formData.append('language_code', languageCode);
 
       const response = await axios.post('https://api.sarvam.ai/speech-to-text', formData, {
         headers: {
@@ -65,8 +72,8 @@ class MultiSTTService {
         return { success: false, error: 'Sarvam returned empty transcript' };
       }
     } catch (error) {
-      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message;
-      return { success: false, error: errorMsg };
+      const classified = providerErrors.classify(error);
+      return { success: false, error: classified.message, classified };
     }
   }
 
@@ -109,15 +116,24 @@ class MultiSTTService {
         const text = response?.text?.trim();
 
         if (text && text.length > 0) {
+          // Gemini is multimodal and can *describe* audio rather than
+          // transcribe it. It is a last-resort fallback only, so we cap its
+          // confidence BELOW Sarvam's success confidence (0.88) and rely on the
+          // caller's hard validation gate to reject descriptions/hallucinations.
           return {
             success: true,
             transcript: text,
-            confidence: 0.94,
+            confidence: 0.7,
             engine: `Gemini Multimodal (${model})`,
           };
         }
       } catch (err) {
-        console.warn(`[MultiSTT] Gemini ${model} notice: ${err.message}`);
+        const classified = providerErrors.classify(err);
+        console.warn(`[MultiSTT] Gemini ${model} notice: ${classified.code} ${classified.message}`);
+        // Do not keep hammering a quota-exhausted account across models.
+        if (classified.quotaExhausted) {
+          return { success: false, error: 'Gemini quota exhausted', classified };
+        }
       }
     }
 
@@ -173,10 +189,12 @@ class MultiSTTService {
    * @param {Buffer} rawAudioBuffer
    * @returns {Promise<{ success: boolean, transcript: string, confidence: number, engine: string }>}
    */
-  async transcribeWithFallback(rawAudioBuffer) {
+  async transcribeWithFallback(rawAudioBuffer, options = {}) {
     if (!rawAudioBuffer || rawAudioBuffer.length === 0) {
-      return { success: false, error: 'Audio buffer is empty' };
+      return { success: false, error: 'Audio buffer is empty', errorCode: 'EMPTY_AUDIO' };
     }
+
+    const languageMode = options.languageMode === 'auto' ? 'auto' : 'od-IN';
 
     // Step 1: Preprocess Audio (Ensure 16kHz Mono + Auto-Gain Amplification)
     console.log(`[MultiSTT] Preprocessing audio buffer (${rawAudioBuffer.length} bytes)...`);
@@ -184,67 +202,75 @@ class MultiSTTService {
     console.log(`[MultiSTT] Preprocessed audio ready (${processedAudio.length} bytes)`);
 
     const results = [];
+    let quotaHit = false;
 
-    // Step 2: Try Primary Sarvam AI STT
-    console.log('🔄 [MultiSTT] Engine 1: Sarvam AI (Odia Saarikav2.5)...');
-    try {
-      const sarvamRes = await this.transcribeWithSarvam(processedAudio);
-      if (sarvamRes.success && sarvamRes.transcript) {
-        results.push(sarvamRes);
-        console.log(`✅ [MultiSTT] Sarvam transcript: "${sarvamRes.transcript}" (confidence: ${sarvamRes.confidence})`);
-      } else {
-        console.warn(`⚠️ [MultiSTT] Sarvam failed or empty: ${sarvamRes.error}`);
+    // Validate + collect a candidate only if it passes the hallucination gate.
+    const consider = (res) => {
+      if (!res || !res.success || !res.transcript) return;
+      const v = sttValidation.validateTranscript(res.transcript, { languageMode });
+      if (!v.valid) {
+        console.warn(`🚫 [MultiSTT] Rejected ${res.engine} transcript (${v.reason}): "${res.transcript.slice(0, 60)}"`);
+        return;
       }
+      results.push({ ...res, transcript: v.cleaned });
+      console.log(`✅ [MultiSTT] Accepted ${res.engine}: "${v.cleaned}" (conf ${res.confidence})`);
+    };
+
+    // Step 2: Primary Sarvam AI STT
+    console.log(`🔄 [MultiSTT] Engine 1: Sarvam AI (mode=${languageMode})...`);
+    try {
+      const sarvamRes = await this.transcribeWithSarvam(processedAudio, { languageMode });
+      consider(sarvamRes);
+      if (sarvamRes.classified?.quotaExhausted) quotaHit = true;
+      if (!sarvamRes.success) console.warn(`⚠️ [MultiSTT] Sarvam failed: ${sarvamRes.error}`);
     } catch (err) {
       console.warn('⚠️ [MultiSTT] Sarvam error:', err.message);
     }
 
-    // Step 3: Try Gemini Multimodal STT if Sarvam is absent or confidence is under 0.75
+    // Step 3: Gemini Multimodal only if we still lack a confident accepted result.
     if (results.length === 0 || results[0].confidence < 0.75) {
-      console.log('🔄 [MultiSTT] Engine 2: Gemini Multimodal Audio Intelligence...');
+      console.log('🔄 [MultiSTT] Engine 2: Gemini Multimodal (last-resort, gated)...');
       try {
         const geminiRes = await this.transcribeWithGemini(processedAudio);
-        if (geminiRes.success && geminiRes.transcript) {
-          results.push(geminiRes);
-          console.log(`✅ [MultiSTT] Gemini transcript: "${geminiRes.transcript}" (confidence: ${geminiRes.confidence})`);
-        } else {
-          console.warn(`⚠️ [MultiSTT] Gemini failed: ${geminiRes.error}`);
-        }
+        consider(geminiRes);
+        if (geminiRes.classified?.quotaExhausted) quotaHit = true;
+        if (!geminiRes.success) console.warn(`⚠️ [MultiSTT] Gemini failed: ${geminiRes.error}`);
       } catch (err) {
         console.warn('⚠️ [MultiSTT] Gemini error:', err.message);
       }
     }
 
-    // Step 4: Try Google Cloud STT if available and still no result
+    // Step 4: Google Cloud STT if available and still nothing valid.
     if (results.length === 0 && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
       console.log('🔄 [MultiSTT] Engine 3: Google Cloud STT...');
       try {
         const googleRes = await this.transcribeWithGoogleCloud(processedAudio);
-        if (googleRes.success && googleRes.transcript) {
-          results.push(googleRes);
-          console.log(`✅ [MultiSTT] Google Cloud transcript: "${googleRes.transcript}"`);
-        }
+        consider(googleRes);
       } catch (err) {
         console.warn('⚠️ [MultiSTT] Google Cloud error:', err.message);
       }
     }
 
-    // Step 5: Select best result
+    // Step 5: Select best VALID result — or fail cleanly. We NEVER invent text.
     if (results.length === 0) {
       return {
         success: false,
-        error: 'All STT engines failed to recognize speech in the audio recording.',
+        errorCode: quotaHit ? 'PROVIDER_QUOTA' : 'STT_FAILED',
+        error: quotaHit
+          ? 'STT providers are rate-limited (quota exhausted).'
+          : 'No reliable speech could be recognized in the audio.',
       };
     }
 
     const best = results.reduce((a, b) => ((b.confidence || 0) > (a.confidence || 0) ? b : a));
-    console.log(`🎯 [MultiSTT] Selected Best Result (${best.engine}): "${best.transcript}"`);
+    console.log(`🎯 [MultiSTT] Selected (${best.engine}): "${best.transcript}"`);
 
     return {
       success: true,
       transcript: best.transcript,
       confidence: best.confidence,
       engine: best.engine,
+      languageMode,
     };
   }
 }
