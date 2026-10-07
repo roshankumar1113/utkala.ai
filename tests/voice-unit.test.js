@@ -96,6 +96,27 @@ test('UNKNOWN action is ambiguous', () => {
   assert.strictEqual(r.needsClarification, true);
 });
 
+console.log('\n== Admin guard ==');
+const access = require('../services/accessGuard');
+test('localhost may upload without a token', () => {
+  assert.strictEqual(access.isAllowedAdminRequest({ ip: '127.0.0.1', header: '', token: '' }), true);
+  assert.strictEqual(access.isAllowedAdminRequest({ ip: '::ffff:127.0.0.1', header: '', token: '' }), true);
+});
+test('a remote address is refused unless the admin token matches', () => {
+  assert.strictEqual(access.isAllowedAdminRequest({ ip: '203.0.113.8', header: '', token: 'secret' }), false);
+  assert.strictEqual(access.isAllowedAdminRequest({ ip: '203.0.113.8', header: 'secret', token: 'secret' }), true);
+  assert.strictEqual(access.isAllowedAdminRequest({ ip: '203.0.113.8', header: 'your_admin_token_here', token: 'your_admin_token_here' }), false);
+});
+
+const speakers = require('../services/voiceSpeakers');
+test('five voices cover male and female, unknown id falls back', () => {
+  assert.strictEqual(speakers.VOICES.length, 5);
+  assert.ok(speakers.VOICES.some((v) => v.gender === 'female'));
+  assert.ok(speakers.VOICES.some((v) => v.gender === 'male'));
+  assert.strictEqual(speakers.resolveVoice('nope').id, 'priya');
+  assert.strictEqual(speakers.resolveVoice('SHUBH').id, 'shubh');
+});
+
 console.log('\n== Streaming sentence buffer ==');
 test('emits complete Odia sentences on danda boundary', () => {
   const b = new SentenceBuffer();
@@ -111,6 +132,12 @@ test('buffers partial deltas until boundary', () => {
   assert.deepStrictEqual(b.push('ଯୋଜନା '), []);
   const out = b.push('ବିଷୟରେ କୁହନ୍ତୁ।');
   assert.strictEqual(out.length, 1);
+});
+test('a short greeting does not stall the following sentence', () => {
+  const b = new SentenceBuffer();
+  const out = b.push('ନମସ୍କାର! ଆପଣ କେମିତି ଅଛନ୍ତି?');
+  assert.strictEqual(out.length, 1);
+  assert.ok(out[0].includes('କେମିତି'));
 });
 test('flush returns trailing text without boundary', () => {
   const b = new SentenceBuffer();

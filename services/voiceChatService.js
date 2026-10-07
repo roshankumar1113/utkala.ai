@@ -1,9 +1,10 @@
 const axios = require('axios');
 const FormData = require('form-data');
 
+const { ttsKey } = require('./keyStatus');
+
 class VoiceChatService {
   constructor() {
-    this.sarvamApiKey = process.env.SARVAM_API_KEY;
     this.sarvamSTTUrl = 'https://api.sarvam.ai/speech-to-text';
     this.sarvamTTSUrl = 'https://api.sarvam.ai/text-to-speech';
   }
@@ -26,12 +27,12 @@ class VoiceChatService {
    */
   async synthesizeOdiaSpeech(text, options = {}) {
     try {
-      const apiKey = this.sarvamApiKey || process.env.SARVAM_API_KEY;
+      const apiKey = ttsKey();
       if (!apiKey) {
-        console.warn('[TTS] No SARVAM_API_KEY found.');
+        console.warn('[TTS] No SARVAM_TTS_API_KEY or SARVAM_API_KEY found.');
         return {
           success: false,
-          error: 'SARVAM_API_KEY is not configured in .env',
+          error: 'SARVAM_TTS_API_KEY or SARVAM_API_KEY is not configured in .env',
         };
       }
 

@@ -10,8 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 
-// Dedicated TTS key if provided, else the shared Sarvam key.
-const SARVAM_API_KEY = process.env.SARVAM_TTS_API_KEY || process.env.SARVAM_API_KEY;
+const { ttsKey } = require('./keyStatus');
 const PUBLIC_OUTPUTS_DIR = path.join(__dirname, '..', 'public', 'outputs');
 
 // Ensure output dir exists
@@ -151,8 +150,9 @@ async function transcribeAudio(audioBuffer, filename, options = {}) {
 async function generateSpeech(text, speaker = 'priya') {
   console.log(`[VoiceService TTS] Generating speech for: "${text.substring(0, 60)}..."`);
 
-  if (!SARVAM_API_KEY) {
-    throw new Error('SARVAM_API_KEY is not configured in .env');
+  const apiKey = ttsKey();
+  if (!apiKey) {
+    throw new Error('SARVAM_TTS_API_KEY or SARVAM_API_KEY is not configured in .env');
   }
 
   // Clean and prepare text for TTS
@@ -172,7 +172,7 @@ async function generateSpeech(text, speaker = 'priya') {
     {
       headers: {
         'Content-Type': 'application/json',
-        'api-subscription-key': SARVAM_API_KEY,
+        'api-subscription-key': apiKey,
       },
       timeout: 30000,
     }
@@ -202,7 +202,8 @@ async function generateSpeech(text, speaker = 'priya') {
  * @returns {Promise<{ audioBase64: string, contentType: string }>}
  */
 async function synthesizeChunk(text, opts = {}) {
-  if (!SARVAM_API_KEY) throw new Error('SARVAM_API_KEY is not configured in .env');
+  const apiKey = ttsKey();
+  if (!apiKey) throw new Error('SARVAM_TTS_API_KEY or SARVAM_API_KEY is not configured in .env');
   const cleanText = String(text).replace(/[*#_`~]/g, '').trim().substring(0, 500);
   if (!cleanText) throw new Error('Empty TTS chunk');
 
@@ -218,7 +219,7 @@ async function synthesizeChunk(text, opts = {}) {
       model: 'bulbul:v3',
     },
     {
-      headers: { 'Content-Type': 'application/json', 'api-subscription-key': SARVAM_API_KEY },
+      headers: { 'Content-Type': 'application/json', 'api-subscription-key': apiKey },
       timeout: 30000,
     }
   );

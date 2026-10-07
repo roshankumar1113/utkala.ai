@@ -8,7 +8,12 @@ const voiceLedgerRoutes = require('./routes/voiceLedgerRoutes');
 const voiceChatSocket = require('./routes/voiceChatSocket');
 const realtimeVoiceSocket = require('./routes/realtimeVoiceSocket');
 const chatService = require('./services/chatService');
+const voiceService = require('./services/voiceService');
+const { resolveVoice, SAMPLE_LINE } = require('./services/voiceSpeakers');
 const aiController = require('./controllers/aiController');
+const providerErrors = require('./services/providerErrors');
+const { logKeyStatus, present } = require('./services/keyStatus');
+const { isAllowedAdminRequest } = require('./services/accessGuard');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,13 +36,48 @@ if (!fs.existsSync(publicOutputsDir)) {
   console.log(`[Init] Static output directory verified: ${publicOutputsDir}`);
 }
 
+function requireLocalOrAdmin(req, res, next) {
+  const ip = String(req.ip || req.socket?.remoteAddress || '');
+  if (isAllowedAdminRequest({ ip, header: req.get('x-admin-token'), token: process.env.ADMIN_TOKEN })) return next();
+  return res.status(403).json({
+    success: false,
+    message: 'ଏହି କାମ କେବଳ ଲୋକାଲ୍ କମ୍ପ୍ୟୁଟର କିମ୍ବା ଆଡମିନ୍ ଟୋକେନ୍ ସହ ସମ୍ଭବ।',
+  });
+}
+
+function chatErrorMessage(error) {
+  const classified = providerErrors.classify(error);
+  const raw = String(error?.message || '');
+  if (/GEMINI_API_KEY|not initialized|API key|default credentials|API_KEY/i.test(raw)) {
+    return 'Gemini ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।';
+  }
+  if (/SARVAM_TTS|SARVAM_STT|SARVAM_API/i.test(raw)) {
+    return 'Sarvam ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। TTS ଓ STT ଚାବି ଯାଞ୍ଚ କରନ୍ତୁ।';
+  }
+  if (classified.code === 'NETWORK') return 'ଇଣ୍ଟରନେଟ୍ ସଂଯୋଗ ନାହିଁ। ଦୟାକରି ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ।';
+  if (classified.code === 'RATE_LIMITED') return 'Sarvam କିମ୍ବା Gemini ବ୍ୟସ୍ତ ଅଛି। କିଛି ସମୟ ପରେ ଚେଷ୍ଟା କରନ୍ତୁ।';
+  if (classified.code === 'AUTH') return 'ସେବା ଚାବି ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।';
+  return classified.userMessage;
+}
+
 // Middlewares
-app.use(cors());
-app.use(express.json());
+const extraOrigins = (process.env.FRONTEND_URL || '').split(',').map((s) => s.trim()).filter(Boolean);
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    callback(null, local || extraOrigins.includes(origin));
+  },
+}));
+app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Serve Static Frontend Dashboard Files
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res, filePath) {
+    if (/\.(html|js|css)$/i.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 
 // Root Endpoint Health Check
 app.get('/', (req, res) => {
@@ -127,7 +167,7 @@ app.get('/api/odia-data/stats', async (req, res) => {
 });
 
 // GET Scraped Odia Data
-app.get('/api/odia-data', (req, res) => {
+app.get('/api/odia-data', requireLocalOrAdmin, (req, res) => {
   try {
     const dataFilePath = path.join(__dirname, 'data', 'scraped_odia_data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -163,7 +203,7 @@ const uploadPdf = multer({
 });
 
 // PDF Upload & Automatic RAG Knowledge Ingestion Endpoint
-app.post('/api/upload-pdf', uploadPdf.single('pdf'), async (req, res) => {
+app.post('/api/upload-pdf', requireLocalOrAdmin, uploadPdf.single('pdf'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No PDF file uploaded.' });
@@ -222,7 +262,7 @@ const RAGPipeline = require('./services/ragPipelineService');
 const VectorStore = require('./services/vectorStoreService');
 
 // 1. POST /api/rag/train - Run full RAG pipeline training
-app.post('/api/rag/train', async (req, res) => {
+app.post('/api/rag/train', requireLocalOrAdmin, async (req, res) => {
   try {
     const pipeline = new RAGPipeline();
     const config = req.body || {};
@@ -288,15 +328,23 @@ async function handleChat(req, res) {
   const sessionData = req.body.session || req.body.userContext || {};
   const image = req.body.image || null; // { mimeType, base64 }
   const useRag = req.body.useRag !== false;
+  const replyLanguage = req.body.replyLanguage === 'en' ? 'en' : 'or';
 
   if (sessionId) sessionData.sessionId = sessionId;
 
   console.log(`[Server] Received message input for /api/chat: "${userMessage?.substring(0, 60)}" (Session: ${sessionId || 'new'}, Image: ${Boolean(image)})`);
 
+  if (!present('GEMINI_API_KEY')) {
+    return res.status(502).json({
+      success: false,
+      message: 'Gemini ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।',
+    });
+  }
+
   if ((!userMessage || userMessage.trim() === '') && !image) {
     return res.status(400).json({
       success: false,
-      message: 'Message or image attachment cannot be empty.'
+      message: 'ବାର୍ତ୍ତା ଖାଲି ଅଛି।'
     });
   }
 
@@ -305,7 +353,7 @@ async function handleChat(req, res) {
       userMessage || 'Analyze this image and explain in Odia.',
       history.length > 0 ? history : sessionId,
       sessionData,
-      { image, useRag }
+      { image, useRag, replyLanguage }
     );
     
     // Support both string and object responses
@@ -320,6 +368,7 @@ async function handleChat(req, res) {
       transliteration: result.transliteration || null,
       ragSources: result.ragSources || [],
       ragContextUsed: result.ragContextUsed || false,
+      knowledgeNote: result.knowledgeNote || null,
       session: result.session || null
     });
   } catch (error) {
@@ -327,11 +376,96 @@ async function handleChat(req, res) {
     
     return res.status(502).json({
       success: false,
-      message: 'Failed to generate AI response. Please try again.',
-      details: error.message
+      message: chatErrorMessage(error),
     });
   }
 }
+
+app.post('/api/chat/stream', async (req, res) => {
+  const userMessage = req.body.message || req.body.query || '';
+  const history = req.body.history || [];
+  const sessionId = req.body.sessionId || req.body.session_id;
+  const sessionData = req.body.session || req.body.userContext || {};
+  const image = req.body.image || null;
+  const useRag = req.body.useRag !== false;
+  const replyLanguage = req.body.replyLanguage === 'en' ? 'en' : 'or';
+  if (sessionId) sessionData.sessionId = sessionId;
+
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  if (!present('GEMINI_API_KEY')) {
+    send('error', { message: 'Gemini ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।' });
+    return res.end();
+  }
+
+  if ((!userMessage || !String(userMessage).trim()) && !image) {
+    send('error', { message: 'ବାର୍ତ୍ତା ଖାଲି ଅଛି।' });
+    return res.end();
+  }
+
+  const abort = new AbortController();
+  let finished = false;
+  res.on('close', () => {
+    if (!finished) abort.abort();
+  });
+
+  try {
+    const result = await chatService.generateUniversalResponseStream(
+      userMessage || 'Analyze this image and explain in Odia.',
+      {
+        sessionId,
+        sessionData,
+        history: Array.isArray(history) ? history : [],
+        image,
+        useRag,
+        replyLanguage,
+        signal: abort.signal,
+        onDelta: (delta) => {
+          if (!abort.signal.aborted) send('delta', { delta });
+        },
+      }
+    );
+    if (!abort.signal.aborted) {
+      send('done', {
+        response: result.response,
+        sessionId: result.sessionId,
+        transliteration: result.transliteration || null,
+        ragSources: result.ragSources || [],
+        ragContextUsed: result.ragContextUsed || false,
+        knowledgeNote: result.knowledgeNote || null,
+        aborted: Boolean(result.aborted),
+      });
+    }
+  } catch (error) {
+    console.error('[Server] Chat stream error:', error.message);
+    if (!abort.signal.aborted) send('error', { message: chatErrorMessage(error) });
+  }
+  finished = true;
+  res.end();
+});
+
+// Short fixed line so a voice chip can be heard before a call. Speaker is whitelisted.
+app.post('/api/voice/sample', async (req, res) => {
+  const voice = resolveVoice(req.body && req.body.speaker);
+  try {
+    const { audioBase64 } = await voiceService.synthesizeChunk(SAMPLE_LINE, {
+      speaker: voice.id,
+      pace: voice.pace,
+    });
+    return res.json({ success: true, speaker: voice.id, audio: audioBase64 });
+  } catch (error) {
+    console.warn('[Voice sample]', error.message);
+    return res.status(502).json({ success: false, message: 'ଏହି ସ୍ୱର ଏବେ ମିଳିଲା ନାହିଁ।' });
+  }
+});
 
 // Bind both endpoints to handleChat to maintain compatibility with client variations
 app.post('/api/chat', handleChat);
@@ -378,6 +512,7 @@ app.use((err, req, res, next) => {
 
 // Start Chat & Voice Server
 server.listen(PORT, '0.0.0.0', () => {
+  logKeyStatus();
   console.log('==================================================');
   console.log(`🚀 Utkal.ai Chat & Voice Server running on Port ${PORT}`);
   console.log(`👉 Chat Interface: http://localhost:${PORT}`);

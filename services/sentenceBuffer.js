@@ -37,20 +37,23 @@ class SentenceBuffer {
     while (guard++ < 1000) {
       const m = this.buffer.match(BOUNDARY_RE);
       if (!m) break;
-      const idx = m.index;
-      const candidate = this.buffer.slice(0, idx + 1).trim();
+      let idx = m.index;
+      let candidate = this.buffer.slice(0, idx + 1).trim();
+      let letters = candidate.replace(/[।.!?\s]/g, '').length;
 
-      if (candidate.replace(/[।.!?\s]/g, '').length >= this.minChars) {
-        out.push(candidate);
-        this.buffer = this.buffer.slice(idx + 1);
-      } else if (this.buffer.length > this.maxChars) {
-        // Sentence-less runaway; flush what we have up to the boundary.
-        out.push(candidate);
-        this.buffer = this.buffer.slice(idx + 1);
-      } else {
-        // Boundary too short (e.g. abbreviation); keep accumulating.
-        break;
+      // A short opener such as "ନମସ୍କାର!" must not freeze the scanner.
+      // Fold it into the next sentence instead of waiting until flush.
+      if (letters < this.minChars && this.buffer.length <= this.maxChars) {
+        const later = this.buffer.slice(idx + 1).search(BOUNDARY_RE);
+        if (later === -1) break;
+        idx = idx + 1 + later;
+        candidate = this.buffer.slice(0, idx + 1).trim();
+        letters = candidate.replace(/[।.!?\s]/g, '').length;
+        if (letters < this.minChars) break;
       }
+
+      out.push(candidate);
+      this.buffer = this.buffer.slice(idx + 1);
     }
 
     // Force-flush an over-long buffer with no boundary at all.

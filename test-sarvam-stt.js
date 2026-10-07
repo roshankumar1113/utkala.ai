@@ -4,14 +4,15 @@ const FormData = require('form-data');
 require('dotenv').config();
 
 async function testSarvamSTT() {
-  const sarvamApiKey = process.env.SARVAM_API_KEY;
+  const { sttKey } = require('./services/keyStatus');
+  const sarvamApiKey = sttKey();
 
   console.log('==================================================');
   console.log('🎙️ Testing Sarvam STT & Voice Connectivity');
   console.log('==================================================\n');
 
   if (!sarvamApiKey || sarvamApiKey === 'your_sarvam_api_key_here') {
-    console.warn('⚠️ SARVAM_API_KEY not configured or set to placeholder.');
+    console.warn('⚠️ SARVAM_STT_API_KEY / SARVAM_API_KEY not configured or set to placeholder.');
     console.log('ℹ️ The system will automatically use Gemini Multimodal Audio fallback for STT.');
     return;
   }

@@ -1,94 +1,65 @@
-# Odia.ai - Chatbot AI Engine for MSMEs in Odisha
+# Utkal.ai
 
-**Odia.ai** is a premium, pure-software text chatbot MVP designed specifically for local shopkeepers, retail owners, and Micro, Small, and Medium Enterprises (MSMEs) in Odisha. 
+Odia assistant for chat, live voice, and a shop khata. People can ask in Odia script, English, or Odia typed in English letters. Replies are in Odia script unless English is selected in the header.
 
-By dropping complex voice processing modules and external audio latency barriers, the application pivots to a **clean, lightweight ChatGPT-style conversation dashboard**. 
+## What it does
 
-The best part? **Your users can type their queries in standard English, pure Odia script, or Odia written in English script (Transliterated Odia, e.g., "Tame kenta achho?"), and the AI immediately comprehends the context and replies strictly in native, beautiful Odia characters (ଓଡ଼ିଆ ଅକ୍ଷର).**
+- **Chat** — Gemini answers with local knowledge-base context when a match exists. Scheme questions without a source show a note to check the official portal.
+- **Voice** — Speak in the Voice tab. Sarvam transcribes, Gemini answers, and speech plays back in short sentences. Shop entries appear as a card and are saved only after you confirm.
+- **Khata** — Today’s sales, udhaar, and party balances stay in this browser (`localStorage` key `utkal_khata`).
 
----
+## Setup
 
-## 🏗️ Project Architecture & Structure
+1. Install [Node.js](https://nodejs.org/) 18 or newer.
+2. Install dependencies:
 
-The refactored project is highly simplified, eliminating complex third-party adapters and disk-caching file dependencies:
-
-```text
-odia-ai-backend/
-├── .env                  # Project environment credentials (API Key)
-├── .env.example          # Template for required environment variables
-├── package.json          # Dependency definition & starting scripts
-├── server.js             # Express app exposing the /api/chat Gemini endpoint & static hosting
-├── README.md             # In-depth setup, API contracts & prompt training guide
-└── public/
-    └── index.html        # Premium Glassmorphic ChatGPT-style Chat App UI
+```bash
+npm install
 ```
 
----
+3. Copy `.env.example` to `.env` and fill in your own keys. If a key was ever pasted into chat or a screenshot, rotate it at the provider first. Do not commit `.env`.
 
-## 🚀 Getting Started
+```env
+PORT=5000
+GEMINI_API_KEY=your_gemini_api_key_here
+SARVAM_API_KEY=your_sarvam_api_key_here
+SARVAM_TTS_API_KEY=your_sarvam_tts_api_key_here
+SARVAM_STT_API_KEY=your_sarvam_stt_api_key_here
+```
 
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v18.0.0 or higher recommended)
-- A [Gemini AI Developer Key](https://aistudio.google.com/)
+`SARVAM_TTS_API_KEY` is used for speech output and `SARVAM_STT_API_KEY` for speech input. If either dedicated key is empty, that call falls back to `SARVAM_API_KEY`.
 
-### Setup and Running
+4. Start the server:
 
-1. **Install Dependencies:**
-   Ensure you are in the project folder and run:
-   ```bash
-   npm install
-   ```
+```bash
+npm start
+```
 
-2. **Configure Environment Variables:**
-   Rename `.env.example` to `.env` (or verify your existing `.env` file) and ensure it looks clean and simple, with **no Sarvam API keys required anymore**:
-   ```env
-   PORT=5000
-   GEMINI_API_KEY=your_actual_gemini_api_key
-   ```
+5. Open [http://localhost:5000](http://localhost:5000).
 
-3. **Start the Chat Server:**
-   Launch the Node process in development or production mode:
-   ```bash
-   npm start
-   ```
+On startup the server prints which keys are present. It never prints the key values.
 
-   You will see the new server startup banner:
-   ```text
-   =============================================
-   💬 Odia.ai Chat Server running on Port 5000
-   👉 Open http://localhost:5000 in your browser
-   =============================================
-   ```
+## Useful endpoints
 
-4. **Launch the Dashboard:**
-   Open your browser and navigate to **`http://localhost:5000`**. You will be greeted by the ultra-clean, glowing Sambalpuri-inspired chat dashboard!
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/health` | Liveness check |
+| POST | `/api/chat` | Full text answer |
+| POST | `/api/chat/stream` | Server-sent events: `delta`, `done`, `error` |
+| POST | `/api/transcribe` | Dictate into the chat box |
+| POST | `/api/process-voice` | One-shot voice pipeline; ledger entries still need confirmation |
+| POST | `/api/upload-pdf` | Local machine, or `x-admin-token` if `ADMIN_TOKEN` is set |
+| POST | `/api/rag/train` | Same restriction as PDF upload |
+| GET | `/api/odia-data` | Full dataset dump, same restriction |
 
----
+Voice realtime uses Socket.IO namespace `/rt-voice`. The old `/voice-realtime.html` page redirects to `/#voice`.
 
-## 💬 Try-Driving Chat Mode (Test Cases)
+PDF upload, RAG training, and the full dataset dump are refused from other computers unless the request sends header `x-admin-token` matching `ADMIN_TOKEN`.
 
-You can type in various styles. Try testing the AI with these real-world merchant query examples:
+## Tests
 
-1. **Transliterated Odia (English Script):**
-   *   *Input:* `"Tame kenta achho? Sabu bhala ta? Bhubaneswar re grocery shop kemiti badhaibi?"`
-   *   *Expected response:* Intuitively understands the transliterated Odia greetings and questions, and responds with warm encouragement and strategic grocery marketing ideas written **strictly in Odia script**.
-2. **Regular English Query:**
-   *   *Input:* `"Can you give me a business strategy to grow a store in Rourkela?"*
-   *   *Expected response:* Instantly translates and structures retail growth ideas, providing a comprehensive localized strategy composed **strictly in Odia script**.
-3. **Pure Odia Script:**
-   *   *Input:* `"ମୋ ଦୋକାନର ବିକ୍ରି ବଢ଼ାଇବା ପାଇଁ ୩ଟି ମାର୍କେଟିଂ ଟିପ୍ସ ଦିଅନ୍ତୁ।"`
-   *   *Expected response:* Formulates a structured marketing list written **strictly in elegant Odia script**.
+```bash
+npm test
+```
 
----
-
-## 🎓 Prompt Customization (How to "Train" Your Advisor)
-
-You can customize the tone, business strategies, and vocabulary of your chatbot by adjusting its **System Instructions**. 
-
-### Where is it Configured?
-Open **[server.js](file:///C:/Users/kumar/.gemini/antigravity/scratch/odia-ai-backend/server.js)** and modify the string constant `SYSTEM_INSTRUCTION` at the top of the file.
-
-### Custom Instruction Directives
-You can expand the system prompt to add specific MSME constraints. E.g.:
-*   **Sector Optimization:** *"If the shopkeeper mentions textiles/clothing, prioritize advice relating to handloom, Sambalpuri weaves, and local festival sales (Durga Puja, Raja Parba, etc.)."*
-*   **Currency Constraints:** *"Ensure all credit or ledger mentions refer to Indian Rupees (₹) and encourage digital transactions via UPI."*
+Those tests cover ledger validation, transcript checks, and provider error labels. They do not call Gemini or Sarvam.

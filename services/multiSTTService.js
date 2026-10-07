@@ -12,8 +12,7 @@ const AudioPreprocessor = require('./audioPreprocessor');
 const sttValidation = require('./sttValidationService');
 const providerErrors = require('./providerErrors');
 
-// Dedicated STT key if provided, else the shared Sarvam key.
-const SARVAM_API_KEY = process.env.SARVAM_STT_API_KEY || process.env.SARVAM_API_KEY;
+const { sttKey } = require('./keyStatus');
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 let ai;
@@ -32,9 +31,9 @@ class MultiSTTService {
    * @returns {Promise<{ success: boolean, transcript: string, confidence: number }>}
    */
   async transcribeWithSarvam(audioBuffer, options = {}) {
-    const apiKey = SARVAM_API_KEY;
+    const apiKey = sttKey();
     if (!apiKey) {
-      return { success: false, error: 'SARVAM_API_KEY is not configured in .env' };
+      return { success: false, error: 'SARVAM_STT_API_KEY or SARVAM_API_KEY is not configured in .env' };
     }
 
     // MODE A (od-IN): force Odia, never rely on auto-detect.
