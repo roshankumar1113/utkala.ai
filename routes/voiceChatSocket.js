@@ -4,19 +4,10 @@ const chatService = require('../services/chatService');
 const sessionMemoryService = require('../services/sessionMemoryService');
 
 module.exports = (server) => {
-  const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:5000',
-    'http://127.0.0.1:5000',
-    'http://127.0.0.1:3000',
-    process.env.FRONTEND_URL,
-  ].filter(Boolean);
-
   const io = socketIo(server, {
     cors: {
-      origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
+      origin: true,
       methods: ['GET', 'POST'],
-      credentials: true,
     },
     maxHttpBufferSize: 100 * 1024 * 1024, // 100MB for large audio streams
   });

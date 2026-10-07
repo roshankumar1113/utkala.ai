@@ -33,6 +33,7 @@ const ledgerParserService = require('../services/ledgerParserService');
 const ledgerValidationService = require('../services/ledgerValidationService');
 const { SentenceBuffer } = require('../services/sentenceBuffer');
 const voiceMetrics = require('../services/voiceMetrics');
+const { resolveVoice } = require('../services/voiceSpeakers');
 
 const SAMPLE_RATE = 16000;
 
@@ -66,6 +67,9 @@ module.exports = (io) => {
     const state = {
       sessionId,
       languageMode: 'od-IN',
+      replyLanguage: 'or',
+      speaker: 'priya',
+      pace: 1.02,
       chunks: [],
       abort: null,      // AbortController for in-flight AI generation
       speaking: false,
@@ -76,8 +80,12 @@ module.exports = (io) => {
 
     socket.on('voice:start', (data = {}) => {
       state.languageMode = data.languageMode === 'auto' ? 'auto' : 'od-IN';
+      state.replyLanguage = data.replyLanguage === 'en' ? 'en' : 'or';
+      const voice = resolveVoice(data.speaker);
+      state.speaker = voice.id;
+      state.pace = voice.pace;
       state.chunks = [];
-      console.log(`🎙️ [RT-Voice] utterance start (mode=${state.languageMode})`);
+      console.log(`🎙️ [RT-Voice] utterance start (mode=${state.languageMode}, speaker=${state.speaker})`);
     });
 
     socket.on('voice:audio', (data = {}) => {
@@ -112,6 +120,28 @@ module.exports = (io) => {
       const abort = new AbortController();
       state.abort = abort;
       const turn = ++state.turnSeq;
+      let ttsStarted = false;
+      let ttsChain = Promise.resolve();
+      function streamTts(text) {
+        const chunk = String(text || '').trim();
+        if (!chunk) return ttsChain;
+        ttsChain = ttsChain.then(async () => {
+          if (abort.signal.aborted || turn !== state.turnSeq) return;
+          try {
+            const { audioBase64, contentType } = await voiceService.synthesizeChunk(chunk, {
+              speaker: state.speaker,
+              pace: state.pace,
+            });
+            if (abort.signal.aborted || turn !== state.turnSeq) return;
+            if (!ttsStarted) { ttsStarted = true; socket.emit('tts:start', {}); metrics.mark('ttsFirstAudio'); }
+            socket.emit('tts:audio', { audio: audioBase64, contentType });
+          } catch (err) {
+            console.warn('[RT-Voice] TTS chunk failed:', err.message);
+            socket.emit('voice:error', { error_code: 'TTS_FAILED', soft: true, message: '🔊 କଣ୍ଠସ୍ୱର ସାମୟିକ ଅନୁପଲବ୍ଧ। ଆପଣ ଉତ୍ତର ପଢ଼ିପାରିବେ।' });
+          }
+        });
+        return ttsChain;
+      }
 
       const pcm = Buffer.concat(state.chunks);
       state.chunks = [];
@@ -161,6 +191,7 @@ module.exports = (io) => {
           });
           if (!v.valid && speak) {
             await streamTts(speak);
+            if (!abort.signal.aborted) socket.emit('tts:end', {});
           }
           metrics.set('ledger', true);
           metrics.complete();
@@ -172,51 +203,34 @@ module.exports = (io) => {
 
       // --- Conversational: stream AI + sentence-buffered TTS ---
       socket.emit('ai:thinking', {});
-      const sBuf = new SentenceBuffer();
+      const sBuf = new SentenceBuffer({ minChars: 8 });
       let firstToken = false;
-      let ttsStarted = false;
-
-      const ttsQueue = [];
-      let ttsRunning = false;
-      async function pumpTts() {
-        if (ttsRunning) return;
-        ttsRunning = true;
-        while (ttsQueue.length && !abort.signal.aborted && turn === state.turnSeq) {
-          const text = ttsQueue.shift();
-          try {
-            const { audioBase64, contentType } = await voiceService.synthesizeChunk(text, { speaker: 'priya' });
-            if (abort.signal.aborted || turn !== state.turnSeq) break;
-            if (!ttsStarted) { ttsStarted = true; socket.emit('tts:start', {}); metrics.mark('ttsFirstAudio'); }
-            socket.emit('tts:audio', { audio: audioBase64, contentType });
-          } catch (err) {
-            // TTS is an optional enhancement — text already streamed. Don't fail the turn.
-            socket.emit('voice:error', { error_code: 'TTS_FAILED', soft: true, message: '🔊 କଣ୍ଠସ୍ୱର ସାମୟିକ ଅନୁପଲବ୍ଧ। ଆପଣ ଉତ୍ତର ପଢ଼ିପାରିବେ।' });
-          }
-        }
-        ttsRunning = false;
-      }
-      function streamTts(text) { ttsQueue.push(text); return pumpTts(); }
 
       try {
         state.speaking = true;
         const result = await chatService.generateUniversalResponseStream(transcript, {
           sessionId: state.sessionId,
           useRag: true,
+          replyLanguage: state.replyLanguage,
+          spoken: true,
           signal: abort.signal,
           onDelta: (delta) => {
             if (!firstToken) { firstToken = true; metrics.mark('aiFirstToken'); }
             socket.emit('ai:text_delta', { delta });
-            for (const sentence of sBuf.push(delta)) ttsQueue.push(sentence);
-            pumpTts();
+            for (const sentence of sBuf.push(delta)) streamTts(sentence);
           },
         });
         metrics.mark('aiDone');
 
-        for (const rest of sBuf.flush()) ttsQueue.push(rest);
-        await pumpTts();
+        for (const rest of sBuf.flush()) streamTts(rest);
+        await ttsChain;
 
         if (!result.aborted) {
-          socket.emit('ai:text_complete', { text: result.response, ragSources: result.ragSources });
+          socket.emit('ai:text_complete', {
+            text: result.response,
+            ragSources: result.ragSources,
+            knowledgeNote: result.knowledgeNote || null,
+          });
           socket.emit('tts:end', {});
           metrics.mark('ttsDone');
         } else {
