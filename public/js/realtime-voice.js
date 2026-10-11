@@ -11,20 +11,31 @@
  *   rv.stopListening();         // manual stop
  */
 class AudioQueue {
-  constructor() {
+  constructor(ctx = null) {
     this.queue = [];
     this.playing = false;
     this.current = null;
+    this.currentSource = null;
     this.onEnd = null;
-    this.ctx = null;
+    this.ctx = ctx || null;
     this.token = 0;
+    this.activeTurnId = null;
   }
   bind(ctx) { this.ctx = ctx; }
-  enqueue(base64Wav) {
-    this.queue.push(base64Wav);
+  setTurnId(turnId) {
+    this.activeTurnId = turnId;
+  }
+  async enqueue(base64Wav, turnId, seq) {
+    if (turnId !== undefined && this.activeTurnId !== null && turnId !== this.activeTurnId) {
+      return;
+    }
+    const item = (typeof base64Wav === 'object' && base64Wav !== null)
+      ? base64Wav
+      : { base64Wav, turnId, seq };
+    this.queue.push(item);
     if (!this.playing) {
       this.playing = true;
-      this._next();
+      await this._next();
     }
   }
   async _next() {
@@ -32,24 +43,32 @@ class AudioQueue {
     if (this.queue.length === 0) {
       this.playing = false;
       this.current = null;
+      this.currentSource = null;
       if (this.onEnd) this.onEnd();
       return;
     }
-    const b64 = this.queue.shift();
+    const item = this.queue.shift();
+    const b64 = typeof item === 'string' ? item : (item && item.base64Wav ? item.base64Wav : item);
     const ctx = this.ctx;
-    if (!ctx) { this._next(); return; }
+    if (!ctx) { await this._next(); return; }
     try {
       if (ctx.state === 'suspended') await ctx.resume();
       if (token !== this.token) return;
-      const binary = atob(b64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      let bytes;
+      if (typeof atob === 'function') {
+        const binary = atob(b64);
+        bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      } else if (typeof Buffer !== 'undefined') {
+        bytes = new Uint8Array(Buffer.from(b64, 'base64'));
+      }
       const audioBuf = await ctx.decodeAudioData(bytes.buffer.slice(0));
       if (token !== this.token) return;
       const src = ctx.createBufferSource();
       src.buffer = audioBuf;
       src.connect(ctx.destination);
       this.current = src;
+      this.currentSource = src;
       src.onended = () => { if (token === this.token) this._next(); };
       src.start();
     } catch (_) {
@@ -60,6 +79,7 @@ class AudioQueue {
     this.token += 1;
     this.queue = [];
     if (this.current) { try { this.current.stop(); } catch (_) {} this.current = null; }
+    if (this.currentSource) { try { this.currentSource.stop(); } catch (_) {} this.currentSource = null; }
     this.playing = false;
   }
 }

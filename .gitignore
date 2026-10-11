@@ -35,5 +35,11 @@ yarn-error.log*
 __pycache__/
 *.pyc
 *.pyo
-.env
 
+# Runtime logs & lock files
+logs/
+*.lock
+
+# Agent runtime data output
+data/odia_agent_output/
+data/my_odia_run/
