@@ -9,7 +9,7 @@
  * Odia uses the danda "।" as a full stop; we also honor ., !, ?, and newlines.
  */
 
-const BOUNDARY_RE = /[।.!?\n]/;
+const BOUNDARY_RE = /[।.!?\n…]/;
 
 class SentenceBuffer {
   /**
@@ -20,6 +20,7 @@ class SentenceBuffer {
   constructor(opts = {}) {
     this.minChars = opts.minChars ?? 12;
     this.maxChars = opts.maxChars ?? 220;
+    this.conversational = Boolean(opts.conversational);
     this.buffer = '';
   }
 
@@ -54,6 +55,18 @@ class SentenceBuffer {
 
       out.push(candidate);
       this.buffer = this.buffer.slice(idx + 1);
+    }
+
+    // A long phrase with a comma can start speaking before the full stop.
+    if (this.conversational) {
+      const comma = this.buffer.indexOf(',');
+      if (comma >= 36) {
+        const phrase = this.buffer.slice(0, comma + 1).trim();
+        if (phrase.replace(/[।.!?\s,]/g, '').length >= 36) {
+          out.push(phrase);
+          this.buffer = this.buffer.slice(comma + 1);
+        }
+      }
     }
 
     // Force-flush an over-long buffer with no boundary at all.

@@ -19,7 +19,9 @@ const PARTY_REQUIRED = new Set(['SALE', 'PURCHASE', 'RECEIVE_CASH', 'PAY_CASH', 
  * @returns {{ valid: boolean, needsClarification: boolean, missing: string[],
  *            clarification: string|null, normalized: Object }}
  */
-function validateTransaction(tx = {}) {
+function validateTransaction(tx = {}, opts = {}) {
+  const lang = opts.language === 'en' ? 'en' : (opts.language === 'hi' || opts.language === 'mix' ? 'hi' : 'or');
+  const say = (english, hindi, odia) => (lang === 'en' ? english : lang === 'hi' ? hindi : odia);
   const normalized = {
     action: typeof tx.action === 'string' ? tx.action.toUpperCase() : 'UNKNOWN',
     party: tx.party && tx.party !== 'N/A' ? String(tx.party).trim() : null,
@@ -37,7 +39,11 @@ function validateTransaction(tx = {}) {
       valid: false,
       needsClarification: true,
       missing: ['action'],
-      clarification: 'ଆପଣ କଣ କରିବାକୁ ଚାହୁଁଛନ୍ତି? (ବିକ୍ରି, କ୍ରୟ, ନଗଦ ଗ୍ରହଣ, ନଗଦ ପ୍ରଦାନ?)',
+      clarification: say(
+        'What do you want to record? (sale, purchase, cash received, or cash paid)',
+        'क्या दर्ज करना है? बिक्री, खरीद, नकद मिला, या नकद दिया?',
+        'ଆପଣ କଣ କରିବାକୁ ଚାହୁଁଛନ୍ତି? (ବିକ୍ରି, କ୍ରୟ, ନଗଦ ଗ୍ରହଣ, ନଗଦ ପ୍ରଦାନ?)'
+      ),
       normalized,
     };
   }
@@ -54,11 +60,11 @@ function validateTransaction(tx = {}) {
   if (missing.length > 0) {
     let clarification;
     if (missing.includes('amount') && missing.includes('party')) {
-      clarification = 'ଆପଣ କାହାକୁ ଏବଂ କେତେ ଟଙ୍କାର କାରବାର କରିଛନ୍ତି?';
+      clarification = say('Who was this with, and for how much?', 'यह किसके साथ था, और कितने का?', 'ଆପଣ କାହାକୁ ଏବଂ କେତେ ଟଙ୍କାର କାରବାର କରିଛନ୍ତି?');
     } else if (missing.includes('amount')) {
-      clarification = 'ଆପଣ କେତେ ଟଙ୍କା କହିଲେ?';
+      clarification = say('How much was the amount?', 'रकम कितनी थी?', 'ଆପଣ କେତେ ଟଙ୍କା କହିଲେ?');
     } else {
-      clarification = 'ଏହା କାହା ସହିତ କାରବାର? (ଗ୍ରାହକ/ପାର୍ଟିର ନାମ କୁହନ୍ତୁ)';
+      clarification = say('Who was this transaction with? Say the customer or party name.', 'यह कारोबार किसके साथ था? ग्राहक या पार्टी का नाम बताएं।', 'ଏହା କାହା ସହିତ କାରବାର? (ଗ୍ରାହକ/ପାର୍ଟିର ନାମ କୁହନ୍ତୁ)');
     }
     return { valid: false, needsClarification: true, missing, clarification, normalized };
   }

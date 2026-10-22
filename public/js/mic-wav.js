@@ -65,9 +65,10 @@
 
   function micMessage(error) {
     const name = error && error.name;
-    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') return 'ମାଇକ୍ ଅନୁମତି ଦରକାର। ବ୍ରାଉଜରର ଲକ୍ ଆଇକନ୍ ରୁ ଅନୁମତି ଦିଅନ୍ତୁ।';
-    if (name === 'NotFoundError') return 'ଏହି କମ୍ପ୍ୟୁଟରରେ ମାଇକ୍ ମିଳିଲା ନାହିଁ।';
-    return (error && error.message) || 'ଭଏସ୍ ଆରମ୍ଭ ହେଲା ନାହିଁ।';
+    const say = (key) => (window.UtkalI18n ? window.UtkalI18n.t(key) : key);
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') return say('micNeed');
+    if (name === 'NotFoundError') return say('micMissing');
+    return (error && error.message) || say('voiceStartFail');
   }
 
   window.MicWav = { createAudioContext, downsample, encodeWav, concatFloat, micMessage };

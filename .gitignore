@@ -43,3 +43,7 @@ logs/
 # Agent runtime data output
 data/odia_agent_output/
 data/my_odia_run/
+
+# Account passwords and session tokens
+data/users.json
+data/sessions.json

@@ -28,6 +28,7 @@ function getOrCreateSession(sessionId, initialData = {}) {
     session = {
       sessionId: id,
       userId: initialData.userId || 'anonymous',
+      ownerId: initialData.ownerId || null,
       userRole: initialData.userRole || initialData.user_role || null, // ଛାତ୍ର/ଚାକିରିଆ/କୃଷକ/ଗୃହିଣୀ/ବିଦ୍ୟାର୍ଥୀ/ବୟସ୍କ/ଅନ୍ୟ
       userAgeGroup: initialData.userAgeGroup || initialData.user_age_group || null, // child/teen/adult/elder
       languagePreference: initialData.languagePreference || initialData.language_preference || 'native_odia', // native_odia | transliterated
@@ -41,6 +42,12 @@ function getOrCreateSession(sessionId, initialData = {}) {
     sessions.set(id, session);
   } else {
     session.lastActiveAt = new Date().toISOString();
+    if (session.ownerId && initialData.ownerId && session.ownerId !== initialData.ownerId) {
+      const forbidden = new Error('SESSION_FORBIDDEN');
+      forbidden.code = 'SESSION_FORBIDDEN';
+      throw forbidden;
+    }
+    if (!session.ownerId && initialData.ownerId) session.ownerId = initialData.ownerId;
     // Merge any newly provided userContext attributes
     if (initialData.userRole || initialData.user_role) session.userRole = initialData.userRole || initialData.user_role;
     if (initialData.userAgeGroup || initialData.user_age_group) session.userAgeGroup = initialData.userAgeGroup || initialData.user_age_group;

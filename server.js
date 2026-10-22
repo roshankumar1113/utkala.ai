@@ -13,7 +13,8 @@ const { resolveVoice, SAMPLE_LINE } = require('./services/voiceSpeakers');
 const aiController = require('./controllers/aiController');
 const providerErrors = require('./services/providerErrors');
 const { logKeyStatus, present } = require('./services/keyStatus');
-const { isAllowedAdminRequest } = require('./services/accessGuard');
+const authRoutes = require('./routes/authRoutes');
+const { requireAuth, requireAdmin } = require('./services/authHttp');
 
 const app = express();
 const server = http.createServer(app);
@@ -36,23 +37,26 @@ if (!fs.existsSync(publicOutputsDir)) {
   console.log(`[Init] Static output directory verified: ${publicOutputsDir}`);
 }
 
-function requireLocalOrAdmin(req, res, next) {
-  const ip = String(req.ip || req.socket?.remoteAddress || '');
-  if (isAllowedAdminRequest({ ip, header: req.get('x-admin-token'), token: process.env.ADMIN_TOKEN })) return next();
-  return res.status(403).json({
-    success: false,
-    message: 'ଏହି କାମ କେବଳ ଲୋକାଲ୍ କମ୍ପ୍ୟୁଟର କିମ୍ବା ଆଡମିନ୍ ଟୋକେନ୍ ସହ ସମ୍ଭବ।',
-  });
-}
-
-function chatErrorMessage(error) {
+function chatErrorMessage(error, replyLanguage) {
+  const en = replyLanguage === 'en';
   const classified = providerErrors.classify(error);
   const raw = String(error?.message || '');
   if (/GEMINI_API_KEY|not initialized|API key|default credentials|API_KEY/i.test(raw)) {
-    return 'Gemini ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।';
+    return en
+      ? 'The Gemini key is missing or invalid. Check the .env file.'
+      : 'Gemini ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।';
   }
   if (/SARVAM_TTS|SARVAM_STT|SARVAM_API/i.test(raw)) {
-    return 'Sarvam ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। TTS ଓ STT ଚାବି ଯାଞ୍ଚ କରନ୍ତୁ।';
+    return en
+      ? 'The Sarvam key is missing or invalid. Check the TTS and STT keys.'
+      : 'Sarvam ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। TTS ଓ STT ଚାବି ଯାଞ୍ଚ କରନ୍ତୁ।';
+  }
+  if (en) {
+    if (classified.code === 'NETWORK') return 'No internet connection. Please try again.';
+    if (classified.code === 'RATE_LIMITED') return 'The service is busy. Try again in a little while.';
+    if (classified.code === 'AUTH' || classified.code === 'FORBIDDEN') return 'The service key is invalid. Check the .env file.';
+    if (classified.code === 'TIMEOUT') return 'The service took too long. Please try again.';
+    return 'The service is temporarily unavailable. Please try again.';
   }
   if (classified.code === 'NETWORK') return 'ଇଣ୍ଟରନେଟ୍ ସଂଯୋଗ ନାହିଁ। ଦୟାକରି ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ।';
   if (classified.code === 'RATE_LIMITED') return 'Sarvam କିମ୍ବା Gemini ବ୍ୟସ୍ତ ଅଛି। କିଛି ସମୟ ପରେ ଚେଷ୍ଟା କରନ୍ତୁ।';
@@ -63,6 +67,7 @@ function chatErrorMessage(error) {
 // Middlewares
 const extraOrigins = (process.env.FRONTEND_URL || '').split(',').map((s) => s.trim()).filter(Boolean);
 app.use(cors({
+  credentials: true,
   origin(origin, callback) {
     if (!origin) return callback(null, true);
     const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
@@ -134,6 +139,11 @@ app.get('/github', (req, res) => {
 
 
 // API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) return next();
+  return requireAuth(req, res, next);
+});
 app.use('/api', voiceLedgerRoutes); // Mount /api/process-voice voice ledger routing endpoint
 app.post('/api/query-rag', aiController.handleUtkalQuery); // Mount local RAG query semantic endpoint
 
@@ -167,7 +177,7 @@ app.get('/api/odia-data/stats', async (req, res) => {
 });
 
 // GET Scraped Odia Data
-app.get('/api/odia-data', requireLocalOrAdmin, (req, res) => {
+app.get('/api/odia-data', requireAdmin, (req, res) => {
   try {
     const dataFilePath = path.join(__dirname, 'data', 'scraped_odia_data.json');
     if (fs.existsSync(dataFilePath)) {
@@ -203,7 +213,7 @@ const uploadPdf = multer({
 });
 
 // PDF Upload & Automatic RAG Knowledge Ingestion Endpoint
-app.post('/api/upload-pdf', requireLocalOrAdmin, uploadPdf.single('pdf'), async (req, res) => {
+app.post('/api/upload-pdf', requireAdmin, uploadPdf.single('pdf'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No PDF file uploaded.' });
@@ -262,7 +272,7 @@ const RAGPipeline = require('./services/ragPipelineService');
 const VectorStore = require('./services/vectorStoreService');
 
 // 1. POST /api/rag/train - Run full RAG pipeline training
-app.post('/api/rag/train', requireLocalOrAdmin, async (req, res) => {
+app.post('/api/rag/train', requireAdmin, async (req, res) => {
   try {
     const pipeline = new RAGPipeline();
     const config = req.body || {};
@@ -331,26 +341,29 @@ async function handleChat(req, res) {
   const replyLanguage = req.body.replyLanguage === 'en' ? 'en' : 'or';
 
   if (sessionId) sessionData.sessionId = sessionId;
+  if (req.user) sessionData.ownerId = req.user.id;
 
   console.log(`[Server] Received message input for /api/chat: "${userMessage?.substring(0, 60)}" (Session: ${sessionId || 'new'}, Image: ${Boolean(image)})`);
 
   if (!present('GEMINI_API_KEY')) {
     return res.status(502).json({
       success: false,
-      message: 'Gemini ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।',
+      message: replyLanguage === 'en'
+        ? 'The Gemini key is missing or invalid. Check the .env file.'
+        : 'Gemini ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।',
     });
   }
 
   if ((!userMessage || userMessage.trim() === '') && !image) {
     return res.status(400).json({
       success: false,
-      message: 'ବାର୍ତ୍ତା ଖାଲି ଅଛି।'
+      message: replyLanguage === 'en' ? 'The message is empty.' : 'ବାର୍ତ୍ତା ଖାଲି ଅଛି।'
     });
   }
 
   try {
     const result = await chatService.generateUniversalResponse(
-      userMessage || 'Analyze this image and explain in Odia.',
+      userMessage || (replyLanguage === 'en' ? 'Look at this image and explain it in English.' : 'Analyze this image and explain in Odia.'),
       history.length > 0 ? history : sessionId,
       sessionData,
       { image, useRag, replyLanguage }
@@ -373,10 +386,12 @@ async function handleChat(req, res) {
     });
   } catch (error) {
     console.error('[Server] Chat generation error:', error.message);
-    
+    if (error.code === 'SESSION_FORBIDDEN') {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN' });
+    }
     return res.status(502).json({
       success: false,
-      message: chatErrorMessage(error),
+      message: chatErrorMessage(error, replyLanguage),
     });
   }
 }
@@ -390,6 +405,7 @@ app.post('/api/chat/stream', async (req, res) => {
   const useRag = req.body.useRag !== false;
   const replyLanguage = req.body.replyLanguage === 'en' ? 'en' : 'or';
   if (sessionId) sessionData.sessionId = sessionId;
+  if (req.user) sessionData.ownerId = req.user.id;
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -402,12 +418,16 @@ app.post('/api/chat/stream', async (req, res) => {
   };
 
   if (!present('GEMINI_API_KEY')) {
-    send('error', { message: 'Gemini ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।' });
+    send('error', {
+      message: replyLanguage === 'en'
+        ? 'The Gemini key is missing or invalid. Check the .env file.'
+        : 'Gemini ଚାବି ମିଳିଲା ନାହିଁ କିମ୍ବା ଭୁଲ୍ ଅଛି। .env ଯାଞ୍ଚ କରନ୍ତୁ।',
+    });
     return res.end();
   }
 
   if ((!userMessage || !String(userMessage).trim()) && !image) {
-    send('error', { message: 'ବାର୍ତ୍ତା ଖାଲି ଅଛି।' });
+    send('error', { message: replyLanguage === 'en' ? 'The message is empty.' : 'ବାର୍ତ୍ତା ଖାଲି ଅଛି।' });
     return res.end();
   }
 
@@ -419,7 +439,7 @@ app.post('/api/chat/stream', async (req, res) => {
 
   try {
     const result = await chatService.generateUniversalResponseStream(
-      userMessage || 'Analyze this image and explain in Odia.',
+      userMessage || (replyLanguage === 'en' ? 'Look at this image and explain it in English.' : 'Analyze this image and explain in Odia.'),
       {
         sessionId,
         sessionData,
@@ -446,7 +466,11 @@ app.post('/api/chat/stream', async (req, res) => {
     }
   } catch (error) {
     console.error('[Server] Chat stream error:', error.message);
-    if (!abort.signal.aborted) send('error', { message: chatErrorMessage(error) });
+    if (!abort.signal.aborted) {
+      send('error', error.code === 'SESSION_FORBIDDEN'
+        ? { code: 'FORBIDDEN' }
+        : { message: chatErrorMessage(error, replyLanguage) });
+    }
   }
   finished = true;
   res.end();
@@ -455,15 +479,21 @@ app.post('/api/chat/stream', async (req, res) => {
 // Short fixed line so a voice chip can be heard before a call. Speaker is whitelisted.
 app.post('/api/voice/sample', async (req, res) => {
   const voice = resolveVoice(req.body && req.body.speaker);
+  const language = req.body && req.body.language === 'en' ? 'en' : 'or';
+  const line = language === 'en' ? 'Hello, I am Utkal. Go ahead, I am listening.' : SAMPLE_LINE;
   try {
-    const { audioBase64 } = await voiceService.synthesizeChunk(SAMPLE_LINE, {
+    const { audioBase64 } = await voiceService.synthesizeChunk(line, {
       speaker: voice.id,
       pace: voice.pace,
+      language,
     });
     return res.json({ success: true, speaker: voice.id, audio: audioBase64 });
   } catch (error) {
     console.warn('[Voice sample]', error.message);
-    return res.status(502).json({ success: false, message: 'ଏହି ସ୍ୱର ଏବେ ମିଳିଲା ନାହିଁ।' });
+    return res.status(502).json({
+      success: false,
+      message: language === 'en' ? 'This voice is not available right now.' : 'ଏହି ସ୍ୱର ଏବେ ମିଳିଲା ନାହିଁ।',
+    });
   }
 });
 
@@ -485,9 +515,17 @@ app.post('/api/chat/check-transliteration', async (req, res) => {
 // Session Info Endpoint
 app.get('/api/chat/session/:sessionId', (req, res) => {
   try {
-    const session = chatService.sessionMemoryService.getOrCreateSession(req.params.sessionId);
+    const session = chatService.sessionMemoryService.getOrCreateSession(req.params.sessionId, {
+      ownerId: req.user && req.user.id,
+    });
+    if (session.ownerId && req.user && session.ownerId !== req.user.id) {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN' });
+    }
     return res.status(200).json({ success: true, session });
   } catch (error) {
+    if (error.code === 'SESSION_FORBIDDEN') {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN' });
+    }
     return res.status(500).json({ success: false, error: error.message });
   }
 });

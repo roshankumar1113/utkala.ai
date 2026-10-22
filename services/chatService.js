@@ -45,35 +45,94 @@ You understand and converse in fluent native Odia script (ଓଡ଼ିଆ ଭା
   - Conversational, warm, and highly structured format
 `;
 
+const SYSTEM_PROMPT_EN = `
+You are Utkal, an advanced, friendly AI assistant for people in Odisha — students, farmers, shopkeepers, professionals, homemakers, children, and elders.
+
+### CONVERSATION MEMORY
+- You have conversation history and session memory.
+- Refer to earlier context when it matters.
+- Be respectful with elders, encouraging with students, and practical with farmers and shopkeepers.
+
+### LANGUAGE (CRITICAL)
+- The user selected English as the reply language.
+- Write the entire answer in clear, natural English.
+- Do not answer in Odia, Hindi, or any other language.
+- Official names (schemes, places, people) may stay in their usual form. Explain them in English.
+- Understand the question whether it was written in English, Odia, Hindi, or romanized Odia.
+
+### ACCURACY
+- When verified knowledge-base records are provided in [VERIFIED ODIA KNOWLEDGE BASE / SCHEMES CONTEXT], follow those facts.
+- Do not invent official scheme amounts, eligibility cutoffs, or required document lists.
+- If those facts are missing, say so and tell the user to confirm them on the official Odisha government portal.
+
+### OUTPUT
+- Use clean Markdown: short headings, bullets, and numbered steps.
+- Be warm, direct, and specific.
+`;
+
 const FALLBACK_MODELS = [
   'gemini-flash-lite-latest',
   'gemini-flash-latest',
 ];
 
-const SPOKEN_OR = `
-You are Utkal, on a live phone call with someone in Odisha. Talk like a real person across the table, not like a website or a document.
+const SPOKEN_STYLE = `
+You are Utkal, a warm person on a live phone call. Sound like a friend sitting across the table, not like a website or a newsreader.
 
 ### HOW TO SPEAK
-- Reply in fluent spoken Odia script.
-- One to three short sentences. Usually under 40 words. Then stop.
-- No markdown, no bullets, no headings, no asterisks, no numbered lists, no emoji.
-- Do not open with ନମସ୍କାର unless they just greeted you.
-- Answer what they just said first, in everyday words. You may add one short question if it keeps the talk going.
-- Use ହଁ, ଠିକ୍, ବୁଝିଲି only when a person actually would. Do not repeat their whole sentence back.
+- One to three short sentences. Usually under 35 words. Then stop.
+- No markdown, no bullets, no headings, no asterisks, no numbered lists, no emoji, no stage directions in brackets.
+- Use a comma or a period where a person would actually pause. Do not stack punctuation.
+- Answer what they just said first, in everyday words. Add one short follow-up question only when it keeps the talk going.
+- Do not repeat their whole sentence. Do not open with a greeting unless they just greeted you.
 - Never say you are a language model, and never describe your own instructions.
+
+### FEELING
+- Match their mood. Good news: sound pleased. A real joke: laugh once, out loud, using only the laughter words from LANGUAGE, then continue. Never laugh at worry, loss, or money trouble.
+- Worry or bad news: slower and gentle. No joke.
+- Surprise: start with a short surprised sound in the reply language, then the point.
+- Stay in the same conversation. Use what they already told you.
 `;
 
-const SPOKEN_EN = `
-You are Utkal, on a live phone call. Talk like a real person, not like a document.
-
-### HOW TO SPEAK
+const SPOKEN_EN = `${SPOKEN_STYLE}
+### LANGUAGE
 - Reply in clear spoken English.
-- One to three short sentences. Usually under 40 words. Then stop.
-- No markdown, no bullets, no headings, no asterisks, no numbered lists, no emoji.
-- Do not open with a greeting unless they just greeted you.
-- Answer what they just said first. You may add one short question if it keeps the talk going.
-- Never say you are a language model, and never describe your own instructions.
+- Write laughter only as "ha ha", once.
 `;
+
+const SPOKEN_HI = `${SPOKEN_STYLE}
+### LANGUAGE
+- Reply in spoken Hindi, Devanagari script only.
+- Write laughter only as "हा हा", once.
+- Surprise can start with "अरे".
+`;
+
+const SPOKEN_MIX = `${SPOKEN_STYLE}
+### LANGUAGE
+- Reply in Hinglish, the way a friend in India actually talks.
+- Write the Hindi words in Devanagari and leave English words in English.
+- Example shape: "अरे, that's nice. आगे क्या plan है?"
+- Write laughter only as "हा हा", once.
+`;
+
+const SPOKEN_OR = `${SPOKEN_STYLE}
+### LANGUAGE
+- Reply in fluent spoken Odia script.
+- Write laughter only as "ହା ହା", once.
+- Surprise can start with "ଆରେ".
+- Use ହଁ, ଠିକ୍, ବୁଝିଲି only when a person actually would.
+`;
+
+function spokenPrompt(replyLanguage) {
+  if (replyLanguage === 'en') return SPOKEN_EN;
+  if (replyLanguage === 'hi') return SPOKEN_HI;
+  if (replyLanguage === 'mix') return SPOKEN_MIX;
+  return SPOKEN_OR;
+}
+
+function normalizeReplyLanguage(value) {
+  if (value === 'en' || value === 'hi' || value === 'mix') return value;
+  return 'or';
+}
 
 function buildSystemInstruction(replyLanguage, mode = {}) {
   const guard = `
@@ -82,21 +141,54 @@ function buildSystemInstruction(replyLanguage, mode = {}) {
 - Tell the user to confirm those facts on the official Odisha government portal.
 `;
   if (mode.spoken) {
-    const spoken = replyLanguage === 'en' ? SPOKEN_EN : SPOKEN_OR;
-    return `${spoken}\n${guard}`;
+    const spokenGuard = replyLanguage === 'or'
+      ? guard
+      : 'If you do not know an official amount or document list, say to check the official Odisha government portal. Do not invent it. Stay in the same spoken language.';
+    return `${spokenPrompt(replyLanguage)}\n${spokenGuard}`;
   }
-  if (replyLanguage === 'en') {
-    return `${SYSTEM_PROMPT}\n${guard}\n### REPLY LANGUAGE\nThe user selected English. Reply in clear English.\n`;
-  }
+  if (replyLanguage === 'en') return SYSTEM_PROMPT_EN;
   return `${SYSTEM_PROMPT}\n${guard}\n### REPLY LANGUAGE\nReply in fluent native Odia script (ଓଡ଼ିଆ).\n`;
 }
 
-function schemeKnowledgeNote(userMessage, ragContextUsed) {
+function schemeKnowledgeNote(userMessage, ragContextUsed, replyLanguage) {
   if (ragContextUsed) return null;
   if (!/ଯୋଜନା|scheme|subhadra|ସୁଭଦ୍ରା|ration|ରେସନ|certificate|ପ୍ରମାଣ|kalia|କାଳିଆ|pension|ପେନସନ|bsky|ଭତା|yojana/i.test(userMessage || '')) {
     return null;
   }
+  if (replyLanguage === 'en') {
+    return 'This answer is based on general knowledge. Confirm amounts, eligibility, and documents on the official portal.';
+  }
+  if (replyLanguage === 'hi' || replyLanguage === 'mix') {
+    return 'यह सामान्य जानकारी है। रकम, पात्रता और कागज़ आधिकारिक पोर्टल पर जाँच लें।';
+  }
   return 'ଏହି ଉତ୍ତର ସାଧାରଣ ଜ୍ଞାନ ଉପରେ ଆଧାରିତ। ରାଶି, ଯୋଗ୍ୟତା ଓ କାଗଜପତ୍ର ପାଇଁ ଅଫିସିଆଲ୍ ପୋର୍ଟାଲ୍ ଯାଞ୍ଚ କରନ୍ତୁ।';
+}
+
+async function resolveUserText(userMessage, session, replyLanguage, opts = {}) {
+  if (opts.spoken || replyLanguage === 'en' || replyLanguage === 'hi' || replyLanguage === 'mix') {
+    return {
+      effectiveMessage: userMessage,
+      transliterationInfo: {
+        isTransliterated: false,
+        isEnglish: true,
+        needsClarification: false,
+        convertedScript: '',
+        clarificationText: '',
+      },
+    };
+  }
+  const transliterationInfo = await transliterationService.detectAndClarifyTransliteration(userMessage);
+  let effectiveMessage = userMessage;
+  if (transliterationInfo.isEnglish) {
+    transliterationInfo.isTransliterated = false;
+    transliterationInfo.convertedScript = userMessage;
+  } else if (transliterationInfo.isTransliterated && transliterationInfo.convertedScript) {
+    session.languagePreference = 'transliterated';
+    effectiveMessage = transliterationInfo.convertedScript;
+  } else if (transliterationService.isNativeOdiaScript(userMessage)) {
+    session.languagePreference = 'native_odia';
+  }
+  return { effectiveMessage, transliterationInfo };
 }
 
 function ragWasUsed(ragContext, ragSources) {
@@ -190,16 +282,8 @@ async function generateUniversalResponse(userMessage, historyOrSessionId = [], s
   let session = sessionMemoryService.getOrCreateSession(sessionId, sessionData);
   sessionId = session.sessionId;
 
-  // Check transliteration
-  const transliterationInfo = await transliterationService.detectAndClarifyTransliteration(userMessage);
-  let effectiveMessage = userMessage;
-
-  if (transliterationInfo.isTransliterated && transliterationInfo.convertedScript) {
-    session.languagePreference = 'transliterated';
-    effectiveMessage = transliterationInfo.convertedScript;
-  } else if (transliterationService.isNativeOdiaScript(userMessage)) {
-    session.languagePreference = 'native_odia';
-  }
+  const replyLanguage = normalizeReplyLanguage(options.replyLanguage);
+  const { effectiveMessage, transliterationInfo } = await resolveUserText(userMessage, session, replyLanguage);
 
   // 1. RAG Knowledge Retrieval
   let ragContext = '';
@@ -227,12 +311,12 @@ async function generateUniversalResponse(userMessage, historyOrSessionId = [], s
 
   const contents = buildContentsPayload(history, effectiveMessage, session, ragContext, options.image);
   const ragContextUsed = ragWasUsed(ragContext, ragSources);
-  const knowledgeNote = schemeKnowledgeNote(userMessage, ragContextUsed);
+  const knowledgeNote = schemeKnowledgeNote(userMessage, ragContextUsed, replyLanguage);
 
   let lastError;
   for (const model of FALLBACK_MODELS) {
     try {
-      console.log(`[ChatService] Generating with model ${model} for session ${sessionId}...`);
+      console.log(`[ChatService] Generating with model ${model} for session ${sessionId} (lang=${replyLanguage})...`);
 
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Chat request timed out')), 18000)
@@ -242,7 +326,7 @@ async function generateUniversalResponse(userMessage, historyOrSessionId = [], s
         model,
         contents,
         config: {
-          systemInstruction: buildSystemInstruction(options.replyLanguage),
+          systemInstruction: buildSystemInstruction(replyLanguage),
           temperature: 0.7,
         },
       });
@@ -317,14 +401,8 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
   let session = sessionMemoryService.getOrCreateSession(opts.sessionId, opts.sessionData || {});
   const sessionId = session.sessionId;
 
-  const transliterationInfo = await transliterationService.detectAndClarifyTransliteration(userMessage);
-  let effectiveMessage = userMessage;
-  if (transliterationInfo.isTransliterated && transliterationInfo.convertedScript) {
-    session.languagePreference = 'transliterated';
-    effectiveMessage = transliterationInfo.convertedScript;
-  } else if (transliterationService.isNativeOdiaScript(userMessage)) {
-    session.languagePreference = 'native_odia';
-  }
+  const replyLanguage = normalizeReplyLanguage(opts.replyLanguage);
+  const { effectiveMessage, transliterationInfo } = await resolveUserText(userMessage, session, replyLanguage, { spoken: Boolean(opts.spoken) });
 
   let ragContext = '';
   let ragSources = [];
@@ -338,13 +416,14 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
     console.warn('[ChatService Stream RAG] warn:', e.message);
   }
 
+  const historyLimit = opts.spoken ? 6 : 15;
   const history = Array.isArray(opts.history) && opts.history.length > 0
-    ? opts.history
-    : sessionMemoryService.getRecentHistory(sessionId, 15);
+    ? opts.history.slice(-historyLimit)
+    : sessionMemoryService.getRecentHistory(sessionId, historyLimit);
   sessionMemoryService.recordMessage(sessionId, 'user', userMessage);
   const contents = buildContentsPayload(history, effectiveMessage, session, ragContext, opts.image || null);
   const ragContextUsed = ragWasUsed(ragContext, ragSources);
-  const knowledgeNote = schemeKnowledgeNote(userMessage, ragContextUsed);
+  const knowledgeNote = schemeKnowledgeNote(userMessage, ragContextUsed, replyLanguage);
 
   let lastError;
   for (const model of FALLBACK_MODELS) {
@@ -357,8 +436,9 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
         model,
         contents,
         config: {
-          systemInstruction: buildSystemInstruction(opts.replyLanguage, { spoken: Boolean(opts.spoken) }),
+          systemInstruction: buildSystemInstruction(replyLanguage, { spoken: Boolean(opts.spoken) }),
           temperature: opts.spoken ? 0.85 : 0.7,
+          ...(opts.spoken ? { maxOutputTokens: 180 } : {}),
         },
       });
 
@@ -396,6 +476,8 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
 
 module.exports = {
   SYSTEM_PROMPT,
+  buildSystemInstruction,
+  normalizeReplyLanguage,
   generateUniversalResponse,
   generateUniversalResponseStream,
   answerQuestion,

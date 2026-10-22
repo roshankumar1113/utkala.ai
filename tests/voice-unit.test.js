@@ -145,5 +145,58 @@ test('flush returns trailing text without boundary', () => {
   assert.strictEqual(b.flush().length, 1);
 });
 
+console.log('\n== Live talk delivery ==');
+const delivery = require('../services/voiceDelivery');
+test('auto mode follows Hindi, English, and Hinglish', () => {
+  const auto = { languageMode: 'auto', replyLanguage: 'or' };
+  assert.strictEqual(delivery.detectSpokenLanguage('आज मौसम कैसा है?', auto), 'hi');
+  assert.strictEqual(delivery.detectSpokenLanguage('What is the weather today?', auto), 'en');
+  assert.strictEqual(delivery.detectSpokenLanguage('bhai what is the plan yaar', auto), 'mix');
+  assert.strictEqual(delivery.detectSpokenLanguage('ଆଜି ପାଗ କେମିତି?', auto), 'or');
+});
+test('Odia mode and the English chip stay fixed', () => {
+  assert.strictEqual(delivery.detectSpokenLanguage('what is this', { languageMode: 'od-IN', replyLanguage: 'or' }), 'or');
+  assert.strictEqual(delivery.detectSpokenLanguage('आज कैसा है', { languageMode: 'auto', replyLanguage: 'en' }), 'en');
+});
+test('laughter is said once and humor speaks warmer and a bit quicker', () => {
+  const line = delivery.forUtterance('ha ha ha ha that was funny', 'tell me a joke', 1);
+  assert.strictEqual(line.text.includes('ha ha ha ha'), false);
+  assert.ok(line.text.includes('ha ha'));
+  assert.strictEqual(line.emotion, 'humor');
+  assert.ok(line.temperature >= 0.78);
+  assert.ok(line.pace > 1);
+});
+test('worry is slower than a cheerful reply', () => {
+  const sad = delivery.forUtterance('I am sorry you are worried', 'I feel sad', 1);
+  const glad = delivery.forUtterance('That is wonderful news', 'I got the job', 1);
+  assert.strictEqual(sad.emotion, 'empathy');
+  assert.strictEqual(glad.emotion, 'happy');
+  assert.ok(sad.pace < glad.pace);
+});
+test('pace and temperature stay inside Bulbul v3 limits', () => {
+  const line = delivery.forUtterance('hello there', '', 9);
+  assert.ok(line.pace <= 2 && line.pace >= 0.5);
+  assert.ok(line.temperature <= 1 && line.temperature >= 0.01);
+  assert.strictEqual(delivery.languageCode('mix'), 'hi-IN');
+  assert.strictEqual(delivery.languageCode('en'), 'en-IN');
+  assert.strictEqual(delivery.languageCode('or'), 'od-IN');
+});
+test('only money talk waits for the ledger parser', () => {
+  assert.strictEqual(delivery.looksLikeLedger('ରମେଶଙ୍କୁ 500 ଟଙ୍କା ଉଧାର ଦେଲି'), true);
+  assert.strictEqual(delivery.looksLikeLedger('ଗୀତଟେ ଗା'), false);
+  assert.strictEqual(delivery.looksLikeLedger('Romantic album'), false);
+});
+test('English spelled in Odia letters is sent back for another listen', () => {
+  assert.strictEqual(delivery.looksLikeForeignInOdia('ଆର୍ ୟୁ ଦେୟାର୍ କେନ୍ ୟୁ ହାର୍ ମି?'), true);
+  assert.strictEqual(delivery.looksLikeForeignInOdia('ଆଜି ପାଗ କେମିତି?'), false);
+  assert.strictEqual(delivery.looksLikeForeignInOdia('can you hear me'), false);
+});
+test('a long spoken phrase can start at a comma', () => {
+  const b = new SentenceBuffer({ conversational: true });
+  const out = b.push('I wanted to tell you something important about the shop, and then ask how your day went');
+  assert.ok(out.length >= 1);
+  assert.ok(out[0].endsWith(','));
+});
+
 console.log(`\n=== ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed === 0 ? 0 : 1);

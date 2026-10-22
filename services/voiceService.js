@@ -1,11 +1,12 @@
 /**
  * voiceService.js
  * Handles Speech-to-Text (Sarvam AI Saarikav2.5 + Gemini Multimodal Fallback)
- * and Text-to-Speech (Sarvam AI Bulbul v2).
+ * and Text-to-Speech (Sarvam AI Bulbul v3: pace and temperature).
  */
 
 require('dotenv').config();
 const axios = require('axios');
+const { languageCode } = require('./voiceDelivery');
 const fs = require('fs');
 const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
@@ -161,12 +162,12 @@ async function generateSpeech(text, speaker = 'priya') {
   const response = await axios.post(
     'https://api.sarvam.ai/text-to-speech',
     {
-      inputs: [cleanText],
-      target_language_code: 'od-IN',
+      text: cleanText,
+      language_code: 'od-IN',
       speaker: speaker || 'priya',
       pace: 1.0,
+      temperature: 0.7,
       speech_sample_rate: 22050,
-      enable_preprocessing: true,
       model: 'bulbul:v3',
     },
     {
@@ -207,15 +208,17 @@ async function synthesizeChunk(text, opts = {}) {
   const cleanText = String(text).replace(/[*#_`~]/g, '').trim().substring(0, 500);
   if (!cleanText) throw new Error('Empty TTS chunk');
 
+  const pace = Math.min(2, Math.max(0.5, Number(opts.pace) || 1));
+  const temperature = Math.min(1, Math.max(0.01, Number(opts.temperature) || 0.72));
   const response = await axios.post(
     'https://api.sarvam.ai/text-to-speech',
     {
-      inputs: [cleanText],
-      target_language_code: 'od-IN',
+      text: cleanText,
+      language_code: languageCode(opts.language),
       speaker: opts.speaker || 'priya',
-      pace: opts.pace ?? 1.0,
+      pace,
+      temperature,
       speech_sample_rate: 22050,
-      enable_preprocessing: true,
       model: 'bulbul:v3',
     },
     {

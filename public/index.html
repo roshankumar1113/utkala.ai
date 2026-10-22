@@ -4,63 +4,98 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Utkal.ai</title>
+  <link rel="icon" href="/logo-mark.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Oriya:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/app.css?v=auth1">
 </head>
-<body>
+<body class="auth-pending">
+  <div class="auth-gate" id="authGate">
+    <form class="auth-card" id="authForm">
+      <img src="/logo-mark.svg?v=3" alt="">
+      <h1 class="wordmark"><span>Utkal<span class="ai">.ai</span></span></h1>
+      <p data-i18n="authHint">ଚାଟ୍, ଭଏସ୍ ଓ ଖାତା ବ୍ୟବହାର କରିବାକୁ ଲଗ୍ ଇନ୍ କରନ୍ତୁ।</p>
+      <div class="seg" role="group" aria-label="Reply language">
+        <button type="button" id="authLangOr" class="active">ଓଡ଼ିଆ</button>
+        <button type="button" id="authLangEn">English</button>
+      </div>
+      <div class="seg" role="group" aria-label="Account">
+        <button type="button" id="authTabLogin" class="active" data-i18n="login">ଲଗ୍ ଇନ୍</button>
+        <button type="button" id="authTabSignup" data-i18n="signup">ଖାତା ଖୋଲନ୍ତୁ</button>
+      </div>
+      <label id="authNameWrap" hidden>
+        <span data-i18n="name">ନାମ</span>
+        <input id="authName" name="name" autocomplete="name" maxlength="60">
+      </label>
+      <label>
+        <span data-i18n="email">ଇମେଲ୍</span>
+        <input id="authEmail" name="email" type="email" autocomplete="username" required maxlength="120">
+      </label>
+      <label>
+        <span data-i18n="password">ପାସୱାର୍ଡ</span>
+        <input id="authPassword" name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="72">
+      </label>
+      <p class="auth-error" id="authError" hidden></p>
+      <button class="primary" type="submit" id="authSubmit" data-i18n="login">ଲଗ୍ ଇନ୍</button>
+    </form>
+  </div>
   <div class="shell">
-    <aside class="rail" aria-label="ମୁଖ୍ୟ ବିଭାଗ">
-      <div class="brand" title="Utkal.ai">ଉ</div>
-      <button type="button" data-screen="chat" class="active" aria-label="Chat">
+    <aside class="rail" aria-label="ମୁଖ୍ୟ ବିଭାଗ" data-i18n-aria="mainNav">
+      <div class="brand" title="Utkal.ai"><img src="/logo-mark.svg?v=3" alt=""></div>
+      <button type="button" data-screen="chat" class="active" aria-label="Chat" data-i18n-aria="navChat">
         <svg viewBox="0 0 24 24"><path d="M4 4h16v12H7l-3 3z"/></svg>
-        ଚାଟ୍
+        <span data-i18n="navChat">ଚାଟ୍</span>
       </button>
-      <button type="button" data-screen="voice" aria-label="Voice">
+      <button type="button" data-screen="voice" aria-label="Voice" data-i18n-aria="navVoice">
         <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z"/></svg>
-        ଭଏସ୍
+        <span data-i18n="navVoice">ଭଏସ୍</span>
       </button>
-      <button type="button" data-screen="khata" aria-label="Khata">
+      <button type="button" data-screen="khata" aria-label="Khata" data-i18n-aria="navKhata">
         <svg viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v16l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2z"/></svg>
-        ଖାତା
+        <span data-i18n="navKhata">ଖାତା</span>
       </button>
     </aside>
 
     <div class="workspace">
       <header class="topbar">
         <div class="titles">
-          <h1>Utkal.ai</h1>
-          <p>ଓଡ଼ିଆ ଚାଟ୍, ଭଏସ୍ ଓ ଦୋକାନ ଖାତା</p>
+          <h1 class="wordmark"><img class="mark" src="/logo-mark.svg?v=3" alt=""><span>Utkal<span class="ai">.ai</span></span></h1>
+          <p data-i18n="tagline">ଓଡ଼ିଆ ଚାଟ୍, ଭଏସ୍ ଓ ଦୋକାନ ଖାତା</p>
         </div>
         <div class="tools">
           <span class="status" id="connStatus"><span class="dot" id="connDot"></span><span id="connText">ଯାଞ୍ଚ ହେଉଛି</span></span>
-          <div class="seg" role="group" aria-label="ଉତ୍ତର ଭାଷା">
+          <div class="seg" role="group" aria-label="Reply language">
             <button type="button" id="langOr" class="active">ଓଡ଼ିଆ</button>
             <button type="button" id="langEn">English</button>
           </div>
-          <button type="button" class="icon-btn" id="fontDown" title="ଅକ୍ଷର ଛୋଟ">A−</button>
-          <button type="button" class="icon-btn" id="fontUp" title="ଅକ୍ଷର ବଡ଼">A+</button>
+          <button type="button" class="icon-btn" id="fontDown" title="ଅକ୍ଷର ଛୋଟ" data-i18n-title="fontDown">A−</button>
+          <button type="button" class="icon-btn" id="fontUp" title="ଅକ୍ଷର ବଡ଼" data-i18n-title="fontUp">A+</button>
           <div class="menu" id="themeMenu">
-            <button type="button" class="ghost" id="themeBtn">ରଙ୍ଗ</button>
+            <button type="button" class="ghost" id="themeBtn" data-i18n="theme">ରଙ୍ଗ</button>
             <div class="menu-pop">
-              <button type="button" data-theme="amber">ଅମ୍ବର</button>
-              <button type="button" data-theme="teal">ଟିଲ୍</button>
-              <button type="button" data-theme="ruby">ରୁବି</button>
+              <button type="button" data-theme="amber" data-i18n="themeAmber">ଅମ୍ବର</button>
+              <button type="button" data-theme="teal" data-i18n="themeTeal">ଟିଲ୍</button>
+              <button type="button" data-theme="ruby" data-i18n="themeRuby">ରୁବି</button>
             </div>
           </div>
-          <button type="button" class="ghost sessions-toggle" id="sessionsToggle">ବାର୍ତ୍ତା</button>
+          <span class="account-name" id="accountName"></span>
+          <button type="button" class="ghost" id="logoutBtn" hidden data-i18n="logout">ବାହାରି ଯାଆନ୍ତୁ</button>
+          <button type="button" class="ghost sessions-toggle" id="sessionsToggle" data-i18n="messages">ବାର୍ତ୍ତା</button>
         </div>
       </header>
 
       <section id="screenChat" class="screen chat-layout active">
         <aside class="sessions" id="sessionsPanel">
-          <button type="button" class="primary" id="newChatBtn">ନୂଆ ବାର୍ତ୍ତା</button>
-          <h2>ପୁରୁଣା ବାର୍ତ୍ତା</h2>
+          <div class="sessions-head">
+            <h2 data-i18n="oldChats">ପୁରୁଣା ବାର୍ତ୍ତା</h2>
+            <button type="button" class="fold-btn" id="sessionsFold" aria-label="ବାର୍ତ୍ତା ଲୁଚାନ୍ତୁ" data-i18n-aria="hideChats">‹</button>
+          </div>
+          <button type="button" class="primary" id="newChatBtn" data-i18n="newChat">ନୂଆ ବାର୍ତ୍ତା</button>
           <div class="session-list" id="sessionList"></div>
-          <div class="side-actions">
-            <button type="button" class="ghost" id="pdfBtn">ଡକ୍ୟୁମେଣ୍ଟ ଯୋଡ଼ନ୍ତୁ</button>
-            <button type="button" class="ghost" id="retrainBtn">ଜ୍ଞାନ ପୁନଃ ସଜାନ୍ତୁ</button>
+          <div class="side-actions" id="adminTools" hidden>
+            <button type="button" class="ghost" id="pdfBtn" data-i18n="addDoc">ଡକ୍ୟୁମେଣ୍ଟ ଯୋଡ଼ନ୍ତୁ</button>
+            <button type="button" class="ghost" id="retrainBtn" data-i18n="retrain">ଜ୍ଞାନ ପୁନଃ ସଜାନ୍ତୁ</button>
             <input type="file" id="pdfInput" accept="application/pdf,.pdf" hidden>
           </div>
         </aside>
@@ -69,22 +104,37 @@
           <div class="preview" id="imagePreview" hidden>
             <img id="previewImg" alt="">
             <span id="previewName"></span>
-            <button type="button" class="ghost" id="previewClear">ହଟାନ୍ତୁ</button>
+            <button type="button" class="ghost" id="previewClear" data-i18n="remove">ହଟାନ୍ତୁ</button>
           </div>
           <form class="composer" id="composer">
-            <button type="button" class="round" id="attachBtn" title="ଚିତ୍ର ଯୋଡ଼ନ୍ତୁ" aria-label="ଚିତ୍ର ଯୋଡ଼ନ୍ତୁ">+</button>
+            <button type="button" class="round" id="attachBtn" title="ଚିତ୍ର ଯୋଡ଼ନ୍ତୁ" aria-label="ଚିତ୍ର ଯୋଡ଼ନ୍ତୁ" data-i18n-title="attach" data-i18n-aria="attach">+</button>
             <input type="file" id="imageInput" accept="image/*" hidden>
-            <textarea id="chatInput" rows="1" placeholder="ଓଡ଼ିଆ, ଇଂରାଜୀ କିମ୍ବା ଇଂରାଜୀ ଅକ୍ଷରରେ ଲେଖନ୍ତୁ"></textarea>
-            <button type="button" class="round" id="dictateBtn" title="କହି ଲେଖନ୍ତୁ" aria-label="କହି ଲେଖନ୍ତୁ">🎙️</button>
-            <button type="button" class="call-btn" id="callBtn">କଲ୍</button>
-            <button type="submit" class="round send" id="sendBtn" aria-label="ପଠାନ୍ତୁ">➤</button>
+            <textarea id="chatInput" rows="1" placeholder="ଓଡ଼ିଆ, ଇଂରାଜୀ କିମ୍ବା ଇଂରାଜୀ ଅକ୍ଷରରେ ଲେଖନ୍ତୁ" data-i18n-placeholder="chatPlaceholder"></textarea>
+            <button type="button" class="round" id="dictateBtn" title="କହି ଲେଖନ୍ତୁ" aria-label="କହି ଲେଖନ୍ତୁ" data-i18n-title="dictate" data-i18n-aria="dictate">🎙️</button>
+            <button type="button" class="call-btn" id="callBtn" data-i18n="call">କଲ୍</button>
+            <button type="submit" class="round send" id="sendBtn" aria-label="ପଠାନ୍ତୁ" data-i18n-aria="send">➤</button>
+            <div class="dictate-bar" id="dictateBar" hidden>
+              <div class="dictate-tip" id="dictateTip">
+                <span id="dictateTipText" data-i18n="cancelDictate">ଡିକ୍ଟେସନ୍ ବନ୍ଦ କରନ୍ତୁ</span>
+                <kbd>Esc</kbd>
+              </div>
+              <button type="button" class="dictate-x" id="dictateCancel" aria-label="ଡିକ୍ଟେସନ୍ ବନ୍ଦ କରନ୍ତୁ" data-i18n-aria="cancelDictate">×</button>
+              <div class="dictate-mid">
+                <p class="dictate-wait" id="dictateWait" data-i18n="allowMic">ମାଇକ୍ ଅନୁମତି ଦିଅନ୍ତୁ</p>
+                <div class="dictate-wave" id="dictateWave" aria-hidden="true">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                </div>
+              </div>
+              <button type="button" class="dictate-stop" id="dictateStopBtn" aria-label="ରୋକନ୍ତୁ" data-i18n-aria="stopDictate"><span></span></button>
+              <button type="button" class="dictate-send" id="dictateSendBtn" aria-label="ପଠାନ୍ତୁ" data-i18n-aria="send">↑</button>
+            </div>
           </form>
         </div>
       </section>
 
       <section id="screenVoice" class="screen voice-screen">
         <div class="seg" role="group" aria-label="ଭାଷା ମୋଡ୍">
-          <button type="button" id="modeOdia" class="active">ଓଡ଼ିଆ</button>
+          <button type="button" id="modeOdia" class="active" data-i18n="modeOdia">ଓଡ଼ିଆ</button>
           <button type="button" id="modeAuto">Auto</button>
         </div>
         <div class="voice-picks" id="voicePicks" role="group" aria-label="Voice">
@@ -94,76 +144,94 @@
           <button type="button" class="voice-pick" data-speaker="shubh">Shubh <span>Male</span></button>
           <button type="button" class="voice-pick" data-speaker="ratan">Ratan <span>Male</span></button>
         </div>
-        <div class="voice-status" id="voiceStatus">କହିବା ପାଇଁ ମାଇକ୍ ଦବାନ୍ତୁ</div>
-        <div class="transcript" id="voiceTranscript" hidden></div>
-        <div class="answer" id="voiceAnswer" hidden></div>
-        <div class="sources" id="voiceSources" hidden></div>
-        <div class="note" id="voiceNote" hidden></div>
+        <div class="voice-status" id="voiceStatus" data-i18n="voiceIdle">ଥରେ ମାଇକ୍ ଦବାନ୍ତୁ। ତାପରେ ସିଧା କୁହନ୍ତୁ।</div>
+        <div class="voice-thread" id="voiceThread">
+          <article class="turn you" id="youTurn" hidden>
+            <div class="turn-kicker" id="youLabel"></div>
+            <div class="live-eq" id="liveEq" hidden aria-hidden="true">
+              <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="turn-body" id="voiceTranscript"></div>
+          </article>
+          <article class="turn utkal" id="utkalTurn" hidden>
+            <div class="turn-kicker">Utkal</div>
+            <div class="turn-body" id="voiceAnswer"></div>
+            <div class="sources" id="voiceSources" hidden></div>
+            <div class="note" id="voiceNote" hidden></div>
+          </article>
+        </div>
         <div class="ledger" id="ledgerCard" hidden>
-          <h2 id="ledgerTitle">ଆପଣ କହିଛନ୍ତି</h2>
+          <h2 id="ledgerTitle" data-i18n="heard">ଆପଣ କହିଛନ୍ତି</h2>
           <div id="ledgerRows"></div>
           <form id="ledgerEdit" hidden>
-            <label>ପାର୍ଟି <input id="editParty"></label>
-            <label>ଜିନିଷ <input id="editItem"></label>
-            <label>ରାଶି <input id="editAmount" type="number" min="0" step="1"></label>
-            <label>ପ୍ରକାର
+            <label><span data-i18n="party">ପାର୍ଟି</span> <input id="editParty"></label>
+            <label><span data-i18n="item">ଜିନିଷ</span> <input id="editItem"></label>
+            <label><span data-i18n="amount">ରାଶି</span> <input id="editAmount" type="number" min="0" step="1"></label>
+            <label><span data-i18n="actionType">ପ୍ରକାର</span>
               <select id="editAction">
                 <option>SALE</option><option>PURCHASE</option><option>RECEIVE_CASH</option><option>PAY_CASH</option><option>CREDIT_GIVEN</option>
               </select>
             </label>
-            <label>ପେମେଣ୍ଟ
+            <label><span data-i18n="payment">ପେମେଣ୍ଟ</span>
               <select id="editPay">
                 <option>CASH</option><option>CREDIT</option><option>ONLINE</option>
               </select>
             </label>
           </form>
           <div class="actions">
-            <button type="button" class="primary" id="ledgerSave">ଠିକ୍ ଅଛି</button>
-            <button type="button" class="ghost" id="ledgerEditBtn">ବଦଳାନ୍ତୁ</button>
+            <button type="button" class="primary" id="ledgerSave" data-i18n="confirmOk">ଠିକ୍ ଅଛି</button>
+            <button type="button" class="ghost" id="ledgerEditBtn" data-i18n="edit">ବଦଳାନ୍ତୁ</button>
           </div>
         </div>
         <div class="mic-wrap">
-          <button type="button" class="mic-main" id="voiceMic" aria-label="କହନ୍ତୁ">🎙️</button>
-          <button type="button" class="danger" id="voiceStop" hidden>ବନ୍ଦ କରନ୍ତୁ</button>
+          <div class="mic-stage" id="micStage">
+            <span class="mic-ring" aria-hidden="true"></span>
+            <span class="mic-ring outer" aria-hidden="true"></span>
+            <button type="button" class="mic-main" id="voiceMic" aria-label="କହନ୍ତୁ" data-i18n-aria="mic">
+              <span class="mic-glyph" aria-hidden="true">🎙️</span>
+              <span class="mic-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+            </button>
+          </div>
+          <button type="button" class="danger" id="voiceStop" hidden data-i18n="stop">ଲାଇଭ୍ ବନ୍ଦ କରନ୍ତୁ</button>
         </div>
       </section>
 
       <section id="screenKhata" class="screen khata-screen">
         <div class="filters" id="khataFilters">
-          <button type="button" data-range="today" class="ghost active">ଆଜି</button>
-          <button type="button" data-range="week" class="ghost">ଏହି ସପ୍ତାହ</button>
-          <button type="button" data-range="all" class="ghost">ସବୁ</button>
+          <button type="button" data-range="today" class="ghost active" data-i18n="today">ଆଜି</button>
+          <button type="button" data-range="week" class="ghost" data-i18n="week">ଏହି ସପ୍ତାହ</button>
+          <button type="button" data-range="all" class="ghost" data-i18n="all">ସବୁ</button>
         </div>
         <div class="summary" id="khataSummary"></div>
-        <button type="button" class="ghost" id="askSummary">ଏହି ହିସାବ ଉତ୍କଳକୁ ବୁଝାଇବାକୁ କୁହନ୍ତୁ</button>
+        <button type="button" class="ghost" id="askSummary" data-i18n="askSummary">ଏହି ହିସାବ ଉତ୍କଳକୁ ବୁଝାଇବାକୁ କୁହନ୍ତୁ</button>
         <div class="khata-grid">
           <form class="panel" id="khataForm">
-            <h2>ନୂଆ ଏଣ୍ଟ୍ରି</h2>
-            <label>ପାର୍ଟି <input name="party" required placeholder="ରମେଶ"></label>
-            <label>ଜିନିଷ <input name="item" placeholder="ଚାଉଳ"></label>
-            <label>ରାଶି <input name="amount" type="number" min="1" step="1" required></label>
-            <label>ପ୍ରକାର
+            <h2 data-i18n="newEntry">ନୂଆ ଏଣ୍ଟ୍ରି</h2>
+            <label><span data-i18n="party">ପାର୍ଟି</span> <input name="party" required placeholder="ରମେଶ" data-i18n-placeholder="partyPh"></label>
+            <label><span data-i18n="item">ଜିନିଷ</span> <input name="item" placeholder="ଚାଉଳ" data-i18n-placeholder="itemPh"></label>
+            <label><span data-i18n="amount">ରାଶି</span> <input name="amount" type="number" min="1" step="1" required></label>
+            <label><span data-i18n="actionType">ପ୍ରକାର</span>
               <select name="action">
-                <option value="SALE">ବିକ୍ରି</option>
-                <option value="PURCHASE">କ୍ରୟ</option>
-                <option value="RECEIVE_CASH">ନଗଦ ଆସିଲା</option>
-                <option value="PAY_CASH">ନଗଦ ଦେଲି</option>
-                <option value="CREDIT_GIVEN">ଉଧାର</option>
+                <option value="SALE" data-i18n="sale">ବିକ୍ରି</option>
+                <option value="PURCHASE" data-i18n="purchase">କ୍ରୟ</option>
+                <option value="RECEIVE_CASH" data-i18n="cashIn">ନଗଦ ଆସିଲା</option>
+                <option value="PAY_CASH" data-i18n="cashOut">ନଗଦ ଦେଲି</option>
+                <option value="CREDIT_GIVEN" data-i18n="credit">ଉଧାର</option>
               </select>
             </label>
-            <label>ପେମେଣ୍ଟ
+            <label><span data-i18n="payment">ପେମେଣ୍ଟ</span>
               <select name="payment_type">
-                <option value="CASH">ନଗଦ</option>
-                <option value="CREDIT">ବାକି</option>
-                <option value="ONLINE">ଅନଲାଇନ୍</option>
+                <option value="CASH" data-i18n="cash">ନଗଦ</option>
+                <option value="CREDIT" data-i18n="due">ବାକି</option>
+                <option value="ONLINE" data-i18n="online">ଅନଲାଇନ୍</option>
               </select>
             </label>
-            <button class="primary" type="submit">ଖାତାରେ ରଖନ୍ତୁ</button>
+            <button class="primary" type="submit" data-i18n="saveKhata">ଖାତାରେ ରଖନ୍ତୁ</button>
           </form>
           <div class="panel">
-            <h2>ପାର୍ଟି ବାକି</h2>
+            <h2 data-i18n="partyBalance">ପାର୍ଟି ବାକି</h2>
             <div id="partyList"></div>
-            <h2>ଏଣ୍ଟ୍ରି</h2>
+            <h2 data-i18n="entries">ଏଣ୍ଟ୍ରି</h2>
             <div class="entry-list" id="entryList"></div>
           </div>
         </div>
@@ -171,28 +239,30 @@
     </div>
   </div>
 
-  <nav class="bottom-nav" aria-label="ମୁଖ୍ୟ ବିଭାଗ">
-    <button type="button" data-screen="chat" class="active">
+  <nav class="bottom-nav" aria-label="ମୁଖ୍ୟ ବିଭାଗ" data-i18n-aria="mainNav">
+    <button type="button" data-screen="chat" class="active" data-i18n-aria="navChat">
       <svg viewBox="0 0 24 24"><path d="M4 4h16v12H7l-3 3z"/></svg>
-      ଚାଟ୍
+      <span data-i18n="navChat">ଚାଟ୍</span>
     </button>
-    <button type="button" data-screen="voice">
+    <button type="button" data-screen="voice" data-i18n-aria="navVoice">
       <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z"/></svg>
-      ଭଏସ୍
+      <span data-i18n="navVoice">ଭଏସ୍</span>
     </button>
-    <button type="button" data-screen="khata">
+    <button type="button" data-screen="khata" data-i18n-aria="navKhata">
       <svg viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v16l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2z"/></svg>
-      ଖାତା
+      <span data-i18n="navKhata">ଖାତା</span>
     </button>
   </nav>
   <div class="toast" id="toast" role="status"></div>
 
+  <script src="/js/i18n.js?v=auth1"></script>
+  <script src="/js/auth.js?v=auth1"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/mic-wav.js"></script>
-  <script src="/js/realtime-voice.js"></script>
-  <script src="/js/khata.js"></script>
-  <script src="/js/chat.js"></script>
-  <script src="/js/voice-tab.js"></script>
-  <script src="/js/app.js"></script>
+  <script src="/js/realtime-voice.js?v=handsfree"></script>
+  <script src="/js/khata.js?v=auth1"></script>
+  <script src="/js/chat.js?v=auth1"></script>
+  <script src="/js/voice-tab.js?v=handsfree"></script>
+  <script src="/js/app.js?v=auth1"></script>
 </body>
 </html>
