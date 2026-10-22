@@ -1,85 +1,169 @@
 (function () {
-  const STORE = 'utkal_chat_sessions';
+  function chatStore() {
+    const id = window.UtkalAuth && window.UtkalAuth.userId();
+    return id ? `utkal_chat_sessions:${id}` : 'utkal_chat_sessions';
+  }
+  function activeChatKey() {
+    const id = window.UtkalAuth && window.UtkalAuth.userId();
+    return id ? `utkal_active_chat:${id}` : 'utkal_active_chat';
+  }
   let sessions = [];
   let activeId = null;
   let imageFile = null;
   let dictating = false;
-  let dictateStop = null;
+  let dictateSession = null;
+
+  function showDictateBar(mode) {
+    const bar = document.getElementById('dictateBar');
+    document.getElementById('composer').classList.add('dictating');
+    bar.hidden = false;
+    bar.classList.toggle('asking', mode === 'ask');
+    const wait = document.getElementById('dictateWait');
+    if (wait) wait.textContent = t('allowMic');
+    const tip = document.getElementById('dictateTipText');
+    if (tip) tip.textContent = t('cancelDictate');
+    document.getElementById('dictateCancel').title = t('cancelDictate');
+    document.getElementById('dictateStopBtn').title = t('stopDictate');
+  }
+
+  function hideDictateBar() {
+    document.getElementById('composer').classList.remove('dictating');
+    const bar = document.getElementById('dictateBar');
+    bar.hidden = true;
+    bar.classList.remove('asking');
+  }
+
+  function paintDictateWave(rms) {
+    const level = Math.max(0.12, Math.min(1, rms / 0.06));
+    const wave = document.getElementById('dictateWave');
+    wave.style.setProperty('--level', level.toFixed(3));
+    wave.querySelectorAll('i').forEach((dot, index) => {
+      const wobble = 0.45 + 0.55 * Math.abs(Math.sin(index * 0.55 + level * 6));
+      dot.style.transform = `scale(${(0.65 + level * wobble).toFixed(2)})`;
+    });
+  }
+
+  function onDictateKey(event) {
+    if (event.key === 'Escape' && dictateSession) {
+      event.preventDefault();
+      dictateSession.finish('cancel');
+    }
+  }
 
   async function toggleDictation() {
-    if (dictating && dictateStop) {
-      dictateStop();
+    if (dictating && dictateSession) {
+      dictateSession.finish('stop');
       return;
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const ctx = window.MicWav.createAudioContext();
-    await ctx.resume();
-    const source = ctx.createMediaStreamSource(stream);
-    const proc = ctx.createScriptProcessor(4096, 1, 1);
-    const mute = ctx.createGain();
-    mute.gain.value = 0;
+    showDictateBar('ask');
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
+      });
+    } catch (error) {
+      hideDictateBar();
+      throw error;
+    }
+    showDictateBar('live');
+    let ctx;
+    let source;
+    let proc;
+    let mute;
     const chunks = [];
-    proc.onaudioprocess = (event) => {
-      chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
-    };
-    source.connect(proc);
-    proc.connect(mute);
-    mute.connect(ctx.destination);
-    dictating = true;
-    document.getElementById('dictateBtn').textContent = '■';
-
-    dictateStop = async () => {
-      dictating = false;
-      dictateStop = null;
-      document.getElementById('dictateBtn').textContent = '🎙️';
-      try { proc.disconnect(); source.disconnect(); mute.disconnect(); } catch (_) {}
+    try {
+      ctx = window.MicWav.createAudioContext();
+      await ctx.resume();
+      source = ctx.createMediaStreamSource(stream);
+      proc = ctx.createScriptProcessor(4096, 1, 1);
+      mute = ctx.createGain();
+      mute.gain.value = 0;
+      proc.onaudioprocess = (event) => {
+        const channel = event.inputBuffer.getChannelData(0);
+        chunks.push(new Float32Array(channel));
+        let sum = 0;
+        for (let i = 0; i < channel.length; i++) sum += channel[i] * channel[i];
+        paintDictateWave(Math.sqrt(sum / channel.length));
+      };
+      source.connect(proc);
+      proc.connect(mute);
+      mute.connect(ctx.destination);
+    } catch (error) {
       stream.getTracks().forEach((track) => track.stop());
-      const rate = ctx.sampleRate || 16000;
-      try { await ctx.close(); } catch (_) {}
-      const samples = window.MicWav.concatFloat(chunks);
-      if (samples.length < rate * 0.3) {
-        window.UtkalApp?.toast('ବହୁତ କମ୍ ସମୟ କହିଲେ। ଆଉଥରେ କହନ୍ତୁ।');
-        return;
-      }
-      const blob = window.MicWav.encodeWav(samples, rate);
-      const form = new FormData();
-      form.append('file', blob, 'dictate.wav');
-      try {
-        const res = await fetch('/api/transcribe', { method: 'POST', body: form });
-        const data = await res.json();
-        if (!data.success || !data.transcription) {
-          window.UtkalApp?.toast(data.message || 'ସ୍ୱର ବୁଝାପଡ଼ିଲା ନାହିଁ।');
+      hideDictateBar();
+      throw error;
+    }
+    dictating = true;
+    document.addEventListener('keydown', onDictateKey);
+
+    const session = {
+      async finish(mode) {
+        if (!dictating && dictateSession !== session) return;
+        dictating = false;
+        dictateSession = null;
+        document.removeEventListener('keydown', onDictateKey);
+        hideDictateBar();
+        try { proc.disconnect(); source.disconnect(); mute.disconnect(); } catch (_) {}
+        stream.getTracks().forEach((track) => track.stop());
+        const rate = ctx.sampleRate || 16000;
+        try { await ctx.close(); } catch (_) {}
+        if (mode === 'cancel') return;
+        const samples = window.MicWav.concatFloat(chunks);
+        if (samples.length < rate * 0.3) {
+          window.UtkalApp?.toast(t('shortSpeech'));
           return;
         }
-        const input = document.getElementById('chatInput');
-        input.value = `${input.value} ${data.transcription}`.trim();
-        input.focus();
-      } catch (_) {
-        window.UtkalApp?.toast('ଇଣ୍ଟରନେଟ୍ ସମସ୍ୟା। ପୁଣିଥରେ ଚେଷ୍ଟା କରନ୍ତୁ।');
-      }
+        const blob = window.MicWav.encodeWav(samples, rate);
+        const form = new FormData();
+        form.append('file', blob, 'dictate.wav');
+        try {
+          const res = await fetch('/api/transcribe', { method: 'POST', body: form });
+          const data = await res.json();
+          if (!data.success || !data.transcription) {
+            window.UtkalApp?.toast(data.message || t('sttFail'));
+            return;
+          }
+          const input = document.getElementById('chatInput');
+          const next = `${input.value} ${data.transcription}`.trim();
+          input.value = mode === 'send' ? '' : next;
+          input.focus();
+          if (mode === 'send') send(next);
+        } catch (_) {
+          window.UtkalApp?.toast(t('netError'));
+        }
+      },
     };
+    dictateSession = session;
   }
   let sending = false;
 
   function loadSessions() {
     try {
-      const raw = JSON.parse(localStorage.getItem(STORE) || '[]');
+      const raw = JSON.parse(localStorage.getItem(chatStore()) || '[]');
       sessions = Array.isArray(raw) ? raw : [];
     } catch (_) {
       sessions = [];
     }
     if (!sessions.length) sessions = [blankSession()];
-    activeId = localStorage.getItem('utkal_active_chat') || sessions[0].id;
+    activeId = localStorage.getItem(activeChatKey()) || sessions[0].id;
     if (!sessions.some((s) => s.id === activeId)) activeId = sessions[0].id;
   }
 
   function persist() {
-    localStorage.setItem(STORE, JSON.stringify(sessions));
-    localStorage.setItem('utkal_active_chat', activeId);
+    localStorage.setItem(chatStore(), JSON.stringify(sessions));
+    localStorage.setItem(activeChatKey(), activeId);
   }
 
   function uid() {
     return (crypto.randomUUID && crypto.randomUUID()) || `c_${Date.now()}`;
+  }
+
+  function t(key) {
+    return window.UtkalI18n ? window.UtkalI18n.t(key) : key;
+  }
+
+  function isFreshTitle(title) {
+    return title === 'ନୂଆ ବାର୍ତ୍ତା' || title === 'New chat';
   }
 
   function blankSession() {
@@ -114,28 +198,14 @@
   }
 
   function welcomeHtml() {
-    const presets = [
-      ['ସରକାରୀ ଯୋଜନା', [
-        ['ସୁଭଦ୍ରା ଯୋଜନା', 'ସୁଭଦ୍ରା ଯୋଜନା ପାଇଁ କେଉଁ କାଗଜପତ୍ର ଲାଗେ?'],
-        ['ରେସନ କାର୍ଡ', 'ନୂଆ ରେସନ କାର୍ଡ ପାଇଁ କଣ କଣ ଲାଗେ?'],
-        ['ପ୍ରମାଣପତ୍ର', 'ଜାତି ଓ ଆୟ ପ୍ରମାଣପତ୍ର ପାଇଁ ମୋ ସେବା କେନ୍ଦ୍ରରେ କଣ ଦରକାର?'],
-      ]],
-      ['ଦୋକାନ ହିସାବ', [
-        ['ଉଧାର ଟିପ୍ସ', 'ଦୋକାନର ଉଧାର ଖାତା କେମିତି ସଜାଡ଼ିବି?'],
-        ['ବିକ୍ରି ବଢ଼ାଅ', 'ଭୁବନେଶ୍ୱରର ଗ୍ରୋସରି ଦୋକାନର ବିକ୍ରି ବଢ଼ାଇବାକୁ ୩ଟି ଉପାୟ କୁହ।'],
-      ]],
-      ['ଖେତ ଓ ପଢ଼ା', [
-        ['ଧାନ ଚାଷ', 'ଏବେ ଧାନ ଖେତରେ କେଉଁ ସାର ଦେବା ଠିକ୍?'],
-        ['ଓଡ଼ିଆ ବର୍ଣ୍ଣ', 'ଛୋଟ ପିଲାଙ୍କୁ ଓଡ଼ିଆ ଅ ଆ କେମିତି ଶିଖାଇବି?'],
-      ]],
-    ];
+    const presets = window.UtkalI18n ? window.UtkalI18n.presets() : [];
     return `<div class="welcome">
-      <h2>ନମସ୍କାର</h2>
-      <p>ଯେକୌଣସି ଭାଷାରେ ପଚାରନ୍ତୁ। ଉତ୍ତର ଓଡ଼ିଆରେ ଆସିବ, English ଚିପ୍ ଚାଲୁ ଥିଲେ ଇଂରାଜୀରେ।</p>
-      ${presets.map(([title, cards]) => `
-        <div class="group-title">${title}</div>
+      <h2>${escapeHtml(t('welcomeTitle'))}</h2>
+      <p>${escapeHtml(t('welcomeBody'))}</p>
+      ${presets.map((group) => `
+        <div class="group-title">${escapeHtml(group.title)}</div>
         <div class="presets">
-          ${cards.map(([name, prompt]) => `<button type="button" class="preset" data-prompt="${escapeHtml(prompt)}"><b>${name}</b><small>${escapeHtml(prompt)}</small></button>`).join('')}
+          ${group.cards.map((card) => `<button type="button" class="preset" data-prompt="${escapeHtml(card.prompt)}"><b>${escapeHtml(card.name)}</b><small>${escapeHtml(card.prompt)}</small></button>`).join('')}
         </div>`).join('')}
     </div>`;
   }
@@ -145,12 +215,13 @@
     const session = current();
     if (!session.messages.length) {
       box.innerHTML = welcomeHtml();
+      renderSessions();
       return;
     }
     box.innerHTML = session.messages.map((msg) => {
       if (msg.role === 'user') {
         const hint = msg.transliteration && msg.transliteration.isTransliterated && msg.transliteration.convertedScript
-          ? `<div class="hint">ବୁଝିଲି: ${escapeHtml(msg.transliteration.convertedScript)}</div>`
+          ? `<div class="hint">${escapeHtml(t('understood'))}: ${escapeHtml(msg.transliteration.convertedScript)}</div>`
           : '';
         return `<div class="bubble user">${escapeHtml(msg.text)}</div>${hint}`;
       }
@@ -166,10 +237,35 @@
     const list = document.getElementById('sessionList');
     if (!list) return;
     list.innerHTML = sessions.map((s) => `
-      <button type="button" class="session-item ${s.id === activeId ? 'active' : ''}" data-id="${s.id}">
-        ${escapeHtml(s.title)}
-        <small>${new Date(s.updatedAt).toLocaleString('en-IN')}</small>
-      </button>`).join('');
+      <div class="session-row">
+        <button type="button" class="session-item ${s.id === activeId ? 'active' : ''}" data-id="${s.id}">
+          ${escapeHtml(isFreshTitle(s.title) ? t('newChat') : s.title)}
+          <small>${new Date(s.updatedAt).toLocaleString('en-IN')}</small>
+        </button>
+        <button type="button" class="session-del" data-del="${s.id}" aria-label="${escapeHtml(t('delete'))}" title="${escapeHtml(t('delete'))}">×</button>
+      </div>`).join('');
+    paintFold();
+  }
+
+  function paintFold() {
+    const panel = document.getElementById('sessionsPanel');
+    const btn = document.getElementById('sessionsFold');
+    if (!panel || !btn) return;
+    const collapsed = localStorage.getItem('utkal_sessions_collapsed') === '1';
+    panel.classList.toggle('collapsed', collapsed);
+    const key = collapsed ? 'showChats' : 'hideChats';
+    btn.textContent = collapsed ? '›' : '‹';
+    btn.setAttribute('aria-label', t(key));
+    btn.title = t(key);
+  }
+
+  function deleteSession(id) {
+    if (sending && id === activeId) return;
+    sessions = sessions.filter((s) => s.id !== id);
+    if (!sessions.length) sessions = [blankSession()];
+    if (!sessions.some((s) => s.id === activeId)) activeId = sessions[0].id;
+    persist();
+    render();
   }
 
   async function readSSE(response, handlers) {
@@ -216,10 +312,10 @@
     sending = true;
     document.getElementById('sendBtn').disabled = true;
     const history = session.messages.filter((m) => !m.pending).map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', text: m.text }));
-    session.messages.push({ role: 'user', text: message || 'ଏହି ଚିତ୍ର ଦେଖି ବୁଝାଇ ଦିଅ।' });
+    session.messages.push({ role: 'user', text: message || t('imageExplain') });
     const pending = { role: 'assistant', text: '', pending: true, sources: [], knowledgeNote: null };
     session.messages.push(pending);
-    if (session.title === 'ନୂଆ ବାର୍ତ୍ତା' && message) session.title = message.slice(0, 42);
+    if (isFreshTitle(session.title) && message) session.title = message.slice(0, 42);
     session.updatedAt = new Date().toISOString();
     persist();
     render();
@@ -241,6 +337,10 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      if (response.status === 401) {
+        window.UtkalAuth?.expire();
+        return;
+      }
       if (!response.ok || !response.body) throw new Error('stream');
       await readSSE(response, {
         delta(data) {
@@ -268,8 +368,12 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
+        if (fallback.status === 401) {
+          window.UtkalAuth?.expire();
+          return;
+        }
         const data = await fallback.json();
-        if (!fallback.ok || !data.success) throw new Error(data.message || 'ଉତ୍ତର ଆସିଲା ନାହିଁ।');
+        if (!fallback.ok || !data.success) throw new Error(data.message || t('answerFail'));
         pending.pending = false;
         pending.text = data.response || data.message;
         pending.sources = data.ragSources || [];
@@ -280,7 +384,7 @@
         pending.pending = false;
         pending.text = fallbackErr.message && fallbackErr.message !== 'stream' && fallbackErr.message !== 'empty'
           ? fallbackErr.message
-          : (err.message && err.message !== 'stream' ? err.message : 'ଉତ୍ତର ଆସିଲା ନାହିଁ। ଇଣ୍ଟରନେଟ୍ କିମ୍ବା ଚାବି ଯାଞ୍ଚ କରନ୍ତୁ।');
+          : (err.message && err.message !== 'stream' ? err.message : t('answerFail'));
       }
     }
     session.updatedAt = new Date().toISOString();
@@ -325,7 +429,22 @@
       persist();
       render();
     });
+    document.getElementById('sessionsFold').addEventListener('click', () => {
+      const narrow = window.matchMedia('(max-width: 860px)').matches;
+      if (narrow) {
+        document.getElementById('sessionsPanel').classList.remove('open');
+        return;
+      }
+      const collapsed = localStorage.getItem('utkal_sessions_collapsed') === '1';
+      localStorage.setItem('utkal_sessions_collapsed', collapsed ? '0' : '1');
+      paintFold();
+    });
     document.getElementById('sessionList').addEventListener('click', (e) => {
+      const del = e.target.closest('[data-del]');
+      if (del) {
+        deleteSession(del.dataset.del);
+        return;
+      }
       const item = e.target.closest('[data-id]');
       if (!item) return;
       activeId = item.dataset.id;
@@ -346,6 +465,15 @@
     document.getElementById('dictateBtn').addEventListener('click', () => {
       toggleDictation().catch((error) => window.UtkalApp?.toast(window.MicWav.micMessage(error)));
     });
+    document.getElementById('dictateCancel').addEventListener('click', () => {
+      if (dictateSession) dictateSession.finish('cancel');
+    });
+    document.getElementById('dictateStopBtn').addEventListener('click', () => {
+      if (dictateSession) dictateSession.finish('stop');
+    });
+    document.getElementById('dictateSendBtn').addEventListener('click', () => {
+      if (dictateSession) dictateSession.finish('send');
+    });
     document.getElementById('pdfBtn').addEventListener('click', () => document.getElementById('pdfInput').click());
     document.getElementById('pdfInput').addEventListener('change', async () => {
       const file = document.getElementById('pdfInput').files[0];
@@ -355,22 +483,23 @@
       try {
         const res = await fetch('/api/upload-pdf', { method: 'POST', body: form });
         const data = await res.json();
-        window.UtkalApp?.toast(data.message || (res.ok ? 'ଡକ୍ୟୁମେଣ୍ଟ ଯୋଡ଼ାଗଲା।' : 'ଡକ୍ୟୁମେଣ୍ଟ ଯୋଡ଼ାଯାଇପାରିଲା ନାହିଁ।'));
+        window.UtkalApp?.toast(data.message || (res.ok ? t('docAdded') : t('docFail')));
       } catch (_) {
-        window.UtkalApp?.toast('ଡକ୍ୟୁମେଣ୍ଟ ଅପଲୋଡ୍ ହେଲା ନାହିଁ।');
+        window.UtkalApp?.toast(t('docUploadFail'));
       }
       document.getElementById('pdfInput').value = '';
     });
     document.getElementById('retrainBtn').addEventListener('click', async () => {
-      window.UtkalApp?.toast('ଜ୍ଞାନ ସଜାଯାଉଛି…');
+      window.UtkalApp?.toast(t('training'));
       try {
         const res = await fetch('/api/rag/train', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         const data = await res.json();
-        window.UtkalApp?.toast(data.message || (res.ok ? 'ସଜାଗଲା।' : 'ସଜାଯାଇପାରିଲା ନାହିଁ।'));
+        window.UtkalApp?.toast(data.message || (res.ok ? t('trained') : t('trainFail')));
       } catch (_) {
-        window.UtkalApp?.toast('ଜ୍ଞାନ ସଜାଯାଇପାରିଲା ନାହିଁ।');
+        window.UtkalApp?.toast(t('trainFail'));
       }
     });
+    document.addEventListener('utkal:lang', () => render());
   }
 
   window.UtkalChat = { init, send, render };

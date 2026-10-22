@@ -1,9 +1,12 @@
 (function () {
-  const KEY = 'utkal_khata';
+  function key() {
+    const id = window.UtkalAuth && window.UtkalAuth.userId();
+    return id ? `utkal_khata:${id}` : 'utkal_khata';
+  }
 
   function load() {
     try {
-      const raw = JSON.parse(localStorage.getItem(KEY) || '[]');
+      const raw = JSON.parse(localStorage.getItem(key()) || '[]');
       return Array.isArray(raw) ? raw : [];
     } catch (_) {
       return [];
@@ -11,7 +14,7 @@
   }
 
   function persist(items) {
-    localStorage.setItem(KEY, JSON.stringify(items));
+    localStorage.setItem(key(), JSON.stringify(items));
   }
 
   function uid() {
@@ -63,7 +66,7 @@
   function balances(rows) {
     const map = new Map();
     rows.forEach((row) => {
-      const name = row.party || 'ସାଧାରଣ';
+      const name = row.party || t('general');
       if (!map.has(name)) map.set(name, { theyOwe: 0, weOwe: 0 });
       const b = map.get(name);
       const amt = Number(row.amount) || 0;
@@ -91,13 +94,20 @@
     return `₹${Number(n || 0).toLocaleString('en-IN')}`;
   }
 
-  const ACTION_LABEL = {
-    SALE: 'ବିକ୍ରି',
-    PURCHASE: 'କ୍ରୟ',
-    RECEIVE_CASH: 'ନଗଦ ଆସିଲା',
-    PAY_CASH: 'ନଗଦ ଦେଲି',
-    CREDIT_GIVEN: 'ଉଧାର',
-  };
+  function t(key) {
+    return window.UtkalI18n ? window.UtkalI18n.t(key) : key;
+  }
+
+  function actionLabel(action) {
+    const key = {
+      SALE: 'sale',
+      PURCHASE: 'purchase',
+      RECEIVE_CASH: 'cashIn',
+      PAY_CASH: 'cashOut',
+      CREDIT_GIVEN: 'credit',
+    }[action];
+    return key ? t(key) : action;
+  }
 
   let range = 'today';
   let editing = null;
@@ -108,11 +118,11 @@
     const summary = document.getElementById('khataSummary');
     if (summary) {
       summary.innerHTML = [
-        ['ବିକ୍ରି', stats.sale],
-        ['କ୍ରୟ', stats.purchase],
-        ['ଉଧାର', stats.udhaar],
-        ['ନଗଦ ଆସିଲା', stats.received],
-        ['ନଗଦ ଗଲା', stats.paid],
+        [t('sale'), stats.sale],
+        [t('purchase'), stats.purchase],
+        [t('credit'), stats.udhaar],
+        [t('cashIn'), stats.received],
+        [t('cashGone'), stats.paid],
       ].map(([label, value]) => `<div class="stat"><span>${label}</span><b>${inr(value)}</b></div>`).join('');
     }
 
@@ -120,26 +130,26 @@
     if (parties) {
       const list = balances(rows).filter(([, b]) => b.theyOwe !== 0 || b.weOwe !== 0);
       parties.innerHTML = list.length
-        ? list.map(([name, b]) => `<div class="party"><b>${escapeHtml(name)}</b><small>ଆମକୁ ଦେବେ ${inr(b.theyOwe)} · ଆମେ ଦେବୁ ${inr(b.weOwe)}</small></div>`).join('')
-        : '<div class="empty">ଏହି ସମୟରେ ବାକି ନାହିଁ।</div>';
+        ? list.map(([name, b]) => `<div class="party"><b>${escapeHtml(name)}</b><small>${escapeHtml(t('theyOwe'))} ${inr(b.theyOwe)} · ${escapeHtml(t('weOwe'))} ${inr(b.weOwe)}</small></div>`).join('')
+        : `<div class="empty">${escapeHtml(t('noBalance'))}</div>`;
     }
 
     const listEl = document.getElementById('entryList');
     if (!listEl) return;
     if (!rows.length) {
-      listEl.innerHTML = '<div class="empty">ମାଇକ୍ ଦବାନ୍ତୁ — “ରମେଶକୁ 500 ଉଧାର ଦେଲି”</div>';
+      listEl.innerHTML = `<div class="empty">${escapeHtml(t('emptyEntries'))}</div>`;
       return;
     }
     listEl.innerHTML = rows.map((row) => `
       <article class="entry" data-id="${row.id}">
         <div>
-          <b>${escapeHtml(row.party || 'ସାଧାରଣ')}</b> · ${escapeHtml(ACTION_LABEL[row.action] || row.action)} · ${inr(row.amount)}
+          <b>${escapeHtml(row.party || t('general'))}</b> · ${escapeHtml(actionLabel(row.action))} · ${inr(row.amount)}
           <small>${escapeHtml(row.item || '')} ${escapeHtml(row.payment_type || '')} · ${new Date(row.createdAt).toLocaleString('en-IN')}</small>
           ${editing === row.id ? editFields(row) : ''}
         </div>
         <div class="ops">
-          <button type="button" data-act="edit">ବଦଳାନ୍ତୁ</button>
-          <button type="button" data-act="del">ହଟାନ୍ତୁ</button>
+          <button type="button" data-act="edit">${escapeHtml(t('change'))}</button>
+          <button type="button" data-act="del">${escapeHtml(t('delete'))}</button>
         </div>
       </article>
     `).join('');
@@ -147,10 +157,10 @@
 
   function editFields(row) {
     return `<form class="side-actions" data-edit="${row.id}">
-      <input name="party" value="${escapeAttr(row.party)}" placeholder="ପାର୍ଟି">
-      <input name="item" value="${escapeAttr(row.item)}" placeholder="ଜିନିଷ">
+      <input name="party" value="${escapeAttr(row.party)}" placeholder="${escapeAttr(t('party'))}">
+      <input name="item" value="${escapeAttr(row.item)}" placeholder="${escapeAttr(t('item'))}">
       <input name="amount" type="number" min="1" value="${Number(row.amount) || ''}">
-      <button type="submit" class="primary">ସେଭ୍</button>
+      <button type="submit" class="primary">${escapeHtml(t('save'))}</button>
     </form>`;
   }
 
@@ -208,12 +218,15 @@
 
     document.getElementById('askSummary')?.addEventListener('click', () => {
       const stats = summarize(filtered(range));
-      const label = range === 'today' ? 'ଆଜି' : range === 'week' ? 'ଏହି ସପ୍ତାହ' : 'ସବୁ ରେକର୍ଡ';
-      const text = `${label}ର ଦୋକାନ ହିସାବ ଏହି ସଂଖ୍ୟା ଉପରେ ଆଧାରିତ। ନୂଆ ରାଶି ଉଦ୍ଭାବନ କର ନାହିଁ। ବିକ୍ରି ${inr(stats.sale)}, କ୍ରୟ ${inr(stats.purchase)}, ଉଧାର ${inr(stats.udhaar)}, ନଗଦ ଆସିଲା ${inr(stats.received)}, ନଗଦ ଗଲା ${inr(stats.paid)}। ଏହାକୁ ସହଜ ଭାଷାରେ ବୁଝାଇ ଦିଅ।`;
+      const label = range === 'today' ? t('today') : range === 'week' ? t('week') : t('allRecords');
+      const text = window.UtkalI18n?.current() === 'en'
+        ? `Explain this shop ledger in simple English. Do not invent amounts. Period: ${label}. Sales ${inr(stats.sale)}, purchases ${inr(stats.purchase)}, credit ${inr(stats.udhaar)}, cash in ${inr(stats.received)}, cash out ${inr(stats.paid)}.`
+        : `${label}ର ଦୋକାନ ହିସାବ ଏହି ସଂଖ୍ୟା ଉପରେ ଆଧାରିତ। ନୂଆ ରାଶି ଉଦ୍ଭାବନ କର ନାହିଁ। ବିକ୍ରି ${inr(stats.sale)}, କ୍ରୟ ${inr(stats.purchase)}, ଉଧାର ${inr(stats.udhaar)}, ନଗଦ ଆସିଲା ${inr(stats.received)}, ନଗଦ ଗଲା ${inr(stats.paid)}। ଏହାକୁ ସହଜ ଭାଷାରେ ବୁଝାଇ ଦିଅ।`;
       window.UtkalApp?.go('chat');
       window.UtkalChat?.send(text);
     });
 
+    document.addEventListener('utkal:lang', () => render());
     render();
   }
 

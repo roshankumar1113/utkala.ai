@@ -1,4 +1,5 @@
 const socketIo = require('socket.io');
+const { socketAuth } = require('../services/authHttp');
 const voiceChatService = require('../services/voiceChatService');
 const chatService = require('../services/chatService');
 const sessionMemoryService = require('../services/sessionMemoryService');
@@ -7,6 +8,7 @@ module.exports = (server) => {
   const io = socketIo(server, {
     cors: {
       origin: true,
+      credentials: true,
       methods: ['GET', 'POST'],
     },
     maxHttpBufferSize: 100 * 1024 * 1024, // 100MB for large audio streams
@@ -14,6 +16,8 @@ module.exports = (server) => {
 
   // Track active sessions
   const activeSessions = new Map();
+
+  io.use(socketAuth);
 
   io.on('connection', (socket) => {
     const sessionId = `session-${socket.id}-${Date.now()}`;

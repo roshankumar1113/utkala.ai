@@ -27,14 +27,25 @@
     localStorage.setItem('utkal_ai_font_size', String(next));
   }
 
+  let online = null;
+
+  function paintConn() {
+    const text = document.getElementById('connText');
+    if (!text || !window.UtkalI18n) return;
+    if (online === null) text.textContent = window.UtkalI18n.t('checking');
+    else text.textContent = online ? window.UtkalI18n.t('connected') : window.UtkalI18n.t('offline');
+  }
+
   function setLang(lang) {
     const en = lang === 'en';
     localStorage.setItem('utkal_reply_lang', en ? 'en' : 'or');
     document.getElementById('langEn').classList.toggle('active', en);
     document.getElementById('langOr').classList.toggle('active', !en);
-    if (window.UtkalVoice) {
-      /* next utterance picks this up */
-    }
+    document.getElementById('authLangEn')?.classList.toggle('active', en);
+    document.getElementById('authLangOr')?.classList.toggle('active', !en);
+    window.UtkalI18n.apply(en ? 'en' : 'or');
+    window.UtkalVoice?.setReplyLanguage?.(en ? 'en' : 'or');
+    paintConn();
   }
 
   function setTheme(theme) {
@@ -47,16 +58,16 @@
 
   async function checkHealth() {
     const dot = document.getElementById('connDot');
-    const text = document.getElementById('connText');
     try {
       const res = await fetch('/health');
       if (!res.ok) throw new Error('down');
+      online = true;
       dot.classList.add('on');
-      text.textContent = 'ସଂଯୁକ୍ତ';
     } catch (_) {
+      online = false;
       dot.classList.remove('on');
-      text.textContent = 'ସଂଯୋଗ ନାହିଁ';
     }
+    paintConn();
   }
 
   function init() {
@@ -106,5 +117,7 @@
   }
 
   window.UtkalApp = { go, toast };
-  init();
+  window.UtkalAuth.start().then((user) => {
+    if (user) init();
+  });
 })();

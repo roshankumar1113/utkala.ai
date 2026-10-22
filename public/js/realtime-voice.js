@@ -95,18 +95,27 @@ class RealtimeVoice {
     this.workletNode = null;
     this.source = null;
     this.listening = false;
+    this.capturing = false;
+    this.callOpen = false;
     this.assistantSpeaking = false;
     this.phase = 'idle';
     this.audioQueue = new AudioQueue();
     this.playCtx = null;
+    this._playTurn = -1;
 
     // VAD state
     this.speechDetected = false;
+    this.speechMs = 0;
     this.silenceMs = 0;
+    this.bargeMs = 0;
     this.lastFrameTime = 0;
-    this.VAD_THRESHOLD = 0.012;   // RMS energy floor for "speech"
-    this.VAD_HANGOVER_MS = 900;   // silence duration to auto-end utterance
-    this.BARGE_THRESHOLD = 0.03;  // higher bar to interrupt Utkal while speaking
+    this.VAD_THRESHOLD = 0.012;
+    this.MIN_SPEECH_MS = 280;
+    this.VAD_HANGOVER_MS = 700;
+    this.BARGE_THRESHOLD = 0.045;
+    this.BARGE_MS = 320;
+    this._levelSmooth = 0;
+    this._levelAt = 0;
   }
 
   _emit(evt, data) { if (this.on[evt]) this.on[evt](data); }
@@ -126,19 +135,40 @@ class RealtimeVoice {
     s.on('ai:thinking', () => this._emit('thinking'));
     s.on('ai:text_delta', (d) => this._emit('textDelta', d));
     s.on('ai:text_complete', (d) => this._emit('textComplete', d));
-    s.on('tts:start', () => { this.assistantSpeaking = true; this.phase = 'speaking'; this._emit('speaking'); });
-    s.on('tts:audio', (d) => {
+    s.on('tts:start', (d) => {
+      if (this._holdAudio || this.capturing) return;
+      if (d && this._dropThrough && d.turn <= this._dropThrough) return;
+      this._playTurn = d && d.turn != null ? d.turn : this._playTurn;
+      this._speakAt = Date.now();
+      this.audioQueue.setTurnId(this._playTurn);
       this.assistantSpeaking = true;
       this.phase = 'speaking';
-      this.audioQueue.enqueue(d.audio);
+      this._emit('speaking');
     });
-    s.on('tts:end', () => {
-      const finish = () => { this.assistantSpeaking = false; this.phase = 'idle'; this._emit('speakEnd'); };
+    s.on('tts:audio', (d) => {
+      if (this._holdAudio) return;
+      if (!d || d.turn !== this._playTurn) return;
+      this.assistantSpeaking = true;
+      this.phase = 'speaking';
+      this.audioQueue.enqueue({ base64Wav: d.audio, turnId: d.turn });
+    });
+    s.on('tts:end', (d) => {
+      const turn = d && d.turn;
+      if (this._holdAudio || this.capturing) return;
+      if (turn != null && this._dropThrough && turn <= this._dropThrough) return;
+      if (turn != null && this._playTurn > 0 && turn !== this._playTurn) return;
+      const finish = () => {
+        if (this.capturing || !this.callOpen) return;
+        this.assistantSpeaking = false;
+        this.phase = 'idle';
+        this._emit('speakEnd');
+        this.armUtterance();
+      };
       if (this.audioQueue.playing || this.audioQueue.queue.length) this.audioQueue.onEnd = finish;
       else finish();
     });
     s.on('voice:stopped', (d) => {
-      if (d.reason === 'interrupted') {
+      if (d && d.reason === 'interrupted' && !this.capturing) {
         this.audioQueue.clear();
         this.assistantSpeaking = false;
         this.phase = 'idle';
@@ -152,6 +182,11 @@ class RealtimeVoice {
         this.phase = 'idle';
       }
       this._emit('error', d);
+      if (this.callOpen && d && !d.soft && d.error_code !== 'MIC_ENDED') {
+        this.capturing = false;
+        this.listening = false;
+        this.armUtterance();
+      }
     });
     s.on('connect_error', (e) => this._emit('error', { error_code: 'SOCKET', message: e.message, soft: true }));
 
@@ -164,7 +199,11 @@ class RealtimeVoice {
   }
 
   async startListening() {
-    if (this.listening || this.starting) return;
+    if (this.starting) return;
+    if (this.callOpen && this.audioCtx) {
+      this.armUtterance();
+      return;
+    }
     if (typeof window.io !== 'function') {
       throw new Error('ଭଏସ୍ ସକେଟ୍ ଲୋଡ୍ ହେଲା ନାହିଁ। ପେଜ୍ ରିଫ୍ରେସ୍ କରନ୍ତୁ।');
     }
@@ -197,40 +236,65 @@ class RealtimeVoice {
     this.mute.gain.value = 0;
     this.workletNode.connect(this.mute);
     this.mute.connect(this.audioCtx.destination);
-
-    this.socket.emit('voice:start', {
-      languageMode: this.languageMode,
-      replyLanguage: this.replyLanguage === 'en' ? 'en' : 'or',
-      speaker: this.speaker || 'priya',
-    });
-    this.listening = true;
-    this.phase = 'listening';
-    this.speechDetected = false;
-    this.silenceMs = 0;
-    this._emit('listening');
-
+    const track = this.stream.getAudioTracks()[0];
+    if (track) {
+      track.onended = () => {
+        if (!this.callOpen) return;
+        this.callOpen = false;
+        this.capturing = false;
+        this.listening = false;
+        this._emit('error', { error_code: 'MIC_ENDED' });
+      };
+    }
+    this.callOpen = true;
     this.workletNode.port.onmessage = (e) => this._onFrame(e.data);
+    this.armUtterance();
     } finally {
       this.starting = false;
     }
   }
 
+  armUtterance(opts = {}) {
+    if (!this.callOpen || !this.socket || !this.audioCtx || this.capturing) return;
+    if (this._playTurn > 0) this._dropThrough = Math.max(this._dropThrough || 0, this._playTurn);
+    this._playTurn = -1;
+    this._holdAudio = Boolean(opts.hold);
+    this.audioQueue.setTurnId(-1);
+    this.audioQueue.clear();
+    this.socket.emit('voice:start', {
+      languageMode: this.languageMode,
+      replyLanguage: this.replyLanguage === 'en' ? 'en' : 'or',
+      speaker: this.speaker || 'priya',
+    });
+    this.capturing = true;
+    this.listening = true;
+    this.phase = 'listening';
+    this.speechDetected = false;
+    this.speechMs = 0;
+    this.silenceMs = 0;
+    this.bargeMs = 0;
+    this._emit('listening');
+  }
+
   _onFrame(raw) {
-    if (!this.listening) return;
+    if (!this.callOpen) return;
     const float32 = raw instanceof Float32Array ? raw : new Float32Array(raw);
     const rate = this.inputRate || 16000;
-    // RMS energy for VAD.
     let sum = 0;
     for (let i = 0; i < float32.length; i++) sum += float32[i] * float32[i];
     const rms = Math.sqrt(sum / float32.length);
     const frameMs = (float32.length / rate) * 1000;
+    if (this.capturing || this.assistantSpeaking) this._paintLevel(rms);
 
-    // Barge-in: user speaks loudly while Utkal is talking.
-    if (this.assistantSpeaking && rms > this.BARGE_THRESHOLD) {
-      this._interrupt();
+    if (!this.capturing && (this.assistantSpeaking || this.phase === 'thinking' || this.phase === 'speaking')) {
+      const echoGuard = this.assistantSpeaking && (Date.now() - (this._speakAt || 0) < 450);
+      if (!echoGuard && rms > this.BARGE_THRESHOLD) this.bargeMs += frameMs;
+      else this.bargeMs = 0;
+      if (this.bargeMs >= this.BARGE_MS) this._interrupt({ resume: true });
+      return;
     }
+    if (!this.capturing) return;
 
-    // Convert Float32 → 16 kHz PCM16 → base64 and stream.
     const samples = window.MicWav.downsample(float32, rate, 16000);
     const pcm = new Int16Array(samples.length);
     for (let i = 0; i < samples.length; i++) {
@@ -240,16 +304,28 @@ class RealtimeVoice {
     const b64 = this._toBase64(new Uint8Array(pcm.buffer));
     this.socket.emit('voice:audio', { chunk: b64 });
 
-    // VAD end-of-speech.
     if (rms > this.VAD_THRESHOLD) {
       this.speechDetected = true;
+      this.speechMs += frameMs;
       this.silenceMs = 0;
     } else if (this.speechDetected) {
       this.silenceMs += frameMs;
-      if (this.silenceMs >= this.VAD_HANGOVER_MS) {
-        this.stopListening(); // natural pause → end utterance
+      if (this.speechMs >= this.MIN_SPEECH_MS && this.silenceMs >= this.VAD_HANGOVER_MS) {
+        this.releaseUtterance();
       }
     }
+  }
+
+  _paintLevel(rms) {
+    const target = Math.max(0, Math.min(1, rms / 0.055));
+    this._levelSmooth += (target - this._levelSmooth) * 0.5;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    if (this._levelAt && now - this._levelAt < 48) return;
+    this._levelAt = now;
+    this._emit('level', {
+      level: this._levelSmooth,
+      speaking: rms > this.VAD_THRESHOLD,
+    });
   }
 
   _toBase64(bytes) {
@@ -278,27 +354,51 @@ class RealtimeVoice {
     return resume;
   }
 
-  _interrupt() {
+  _interrupt(opts = {}) {
+    if (this._playTurn > 0) this._dropThrough = this._playTurn;
+    this._playTurn = -1;
+    this._holdAudio = true;
+    this.audioQueue.setTurnId(-1);
     this.audioQueue.clear();
     this.assistantSpeaking = false;
-    this.phase = 'idle';
+    this.bargeMs = 0;
     if (this.socket) this.socket.emit('voice:interrupt');
-    this._emit('interrupted');
+    if (!opts.hangup) this._emit('interrupted');
+    if (opts.resume && this.callOpen) {
+      this.capturing = false;
+      this.listening = false;
+      this.armUtterance({ hold: true });
+    }
   }
 
-  stopListening() {
-    if (!this.listening) return;
+  releaseUtterance() {
+    if (!this.capturing) return;
+    const heard = this.speechDetected && this.speechMs >= this.MIN_SPEECH_MS;
+    this.capturing = false;
     this.listening = false;
-    this._teardownMic();
-    if (this.speechDetected) {
+    this.speechDetected = false;
+    this._emit('level', { level: 0, speaking: false });
+    if (heard) {
+      this._holdAudio = false;
       this.phase = 'thinking';
       this.socket.emit('voice:stop');
       this._emit('thinking');
-    } else {
-      this.phase = 'idle';
+    } else if (this.callOpen) {
       this.socket.emit('voice:cancel');
+      this.armUtterance();
     }
-    this.speechDetected = false;
+  }
+
+  stopListening() {
+    this.callOpen = false;
+    this.capturing = false;
+    this.listening = false;
+    this._interrupt({ hangup: true });
+    this._emit('level', { level: 0, speaking: false });
+    this._teardownMic();
+    this.phase = 'idle';
+    if (this.socket) this.socket.emit('voice:cancel');
+    this._emit('stopped', { reason: 'hangup' });
   }
 
   cancel() {
