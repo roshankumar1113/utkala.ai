@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node tests/voice-unit.test.js"
+    "test": "node tests/voice-unit.test.js && node tests/auth-unit.test.js && node tests/live-data.test.js && node tests/realtime-voice-level3.test.js"
   },
   "keywords": [
     "odia",
