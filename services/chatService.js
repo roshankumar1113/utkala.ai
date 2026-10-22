@@ -9,6 +9,7 @@ const { GoogleGenAI } = require('@google/genai');
 const sessionMemoryService = require('./sessionMemoryService');
 const transliterationService = require('./transliterationService');
 const ragService = require('./ragService');
+const { fetchLiveContext, LIVE_PROMPT_RULE } = require('./liveDataService');
 
 let ai;
 try {
@@ -144,10 +145,10 @@ function buildSystemInstruction(replyLanguage, mode = {}) {
     const spokenGuard = replyLanguage === 'or'
       ? guard
       : 'If you do not know an official amount or document list, say to check the official Odisha government portal. Do not invent it. Stay in the same spoken language.';
-    return `${spokenPrompt(replyLanguage)}\n${spokenGuard}`;
+    return `${spokenPrompt(replyLanguage)}\n${spokenGuard}\n${LIVE_PROMPT_RULE}`;
   }
-  if (replyLanguage === 'en') return SYSTEM_PROMPT_EN;
-  return `${SYSTEM_PROMPT}\n${guard}\n### REPLY LANGUAGE\nReply in fluent native Odia script (ଓଡ଼ିଆ).\n`;
+  if (replyLanguage === 'en') return `${SYSTEM_PROMPT_EN}\n${LIVE_PROMPT_RULE}`;
+  return `${SYSTEM_PROMPT}\n${guard}\n${LIVE_PROMPT_RULE}\n### REPLY LANGUAGE\nReply in fluent native Odia script (ଓଡ଼ିଆ).\n`;
 }
 
 function schemeKnowledgeNote(userMessage, ragContextUsed, replyLanguage) {
@@ -303,6 +304,19 @@ async function generateUniversalResponse(userMessage, historyOrSessionId = [], s
     console.warn('[ChatService RAG] Retrieval warn:', ragErr.message);
   }
 
+  // 1b. Live Context Fetch (Open-Meteo weather and Tavily web search)
+  try {
+    const live = await fetchLiveContext(effectiveMessage || userMessage);
+    if (live) {
+      ragContext = ragContext ? `${ragContext}\n\n${live.contextText}` : live.contextText;
+      if (Array.isArray(live.sources)) {
+        ragSources.push(...live.sources);
+      }
+    }
+  } catch (liveErr) {
+    console.warn('[ChatService LiveData] fetch warn:', liveErr.message);
+  }
+
   const history = Array.isArray(historyOrSessionId) && historyOrSessionId.length > 0
     ? historyOrSessionId
     : sessionMemoryService.getRecentHistory(sessionId, 15);
@@ -416,6 +430,19 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
     console.warn('[ChatService Stream RAG] warn:', e.message);
   }
 
+  // Live Context Fetch (Open-Meteo weather and Tavily web search)
+  try {
+    const live = await fetchLiveContext(effectiveMessage || userMessage);
+    if (live) {
+      ragContext = ragContext ? `${ragContext}\n\n${live.contextText}` : live.contextText;
+      if (Array.isArray(live.sources)) {
+        ragSources.push(...live.sources);
+      }
+    }
+  } catch (liveErr) {
+    console.warn('[ChatService Stream LiveData] fetch warn:', liveErr.message);
+  }
+
   const historyLimit = opts.spoken ? 6 : 15;
   const history = Array.isArray(opts.history) && opts.history.length > 0
     ? opts.history.slice(-historyLimit)
@@ -476,6 +503,7 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
 
 module.exports = {
   SYSTEM_PROMPT,
+  LIVE_PROMPT_RULE,
   buildSystemInstruction,
   normalizeReplyLanguage,
   generateUniversalResponse,
