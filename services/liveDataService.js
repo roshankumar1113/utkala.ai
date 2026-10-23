@@ -207,19 +207,29 @@ async function fetchLiveContext(userMessage) {
     if (weatherData) {
       results.push(weatherData.contextText);
       sources.push(...weatherData.sources);
+    } else {
+      console.warn('[LiveDataService] fetchWeather returned null — Open-Meteo request failed or timed out. Query:', userMessage.substring(0, 80));
     }
   }
 
   // Web query via Tavily
-  if (liveNeed || (!weatherNeed && process.env.TAVILY_API_KEY)) {
-    const webData = await fetchWebSearch(userMessage);
-    if (webData) {
-      results.push(webData.contextText);
-      sources.push(...webData.sources);
+  if (liveNeed) {
+    const tavilyKey = process.env.TAVILY_API_KEY;
+    if (!tavilyKey || tavilyKey.includes('your_') || tavilyKey.includes('placeholder')) {
+      console.warn('[LiveDataService] fetchWebSearch skipped — TAVILY_API_KEY is missing or still a placeholder. Set it in environment variables to enable live web search.');
+    } else {
+      const webData = await fetchWebSearch(userMessage);
+      if (webData) {
+        results.push(webData.contextText);
+        sources.push(...webData.sources);
+      } else {
+        console.warn('[LiveDataService] fetchWebSearch returned null — Tavily request failed or returned no results. Query:', userMessage.substring(0, 80));
+      }
     }
   }
 
   if (results.length === 0) {
+    console.warn('[LiveDataService] fetchLiveContext returning null — all live fetches failed or were skipped. weatherNeed=%s liveNeed=%s', weatherNeed, liveNeed);
     return null;
   }
 

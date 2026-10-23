@@ -8,6 +8,7 @@ const voiceLedgerRoutes = require('./routes/voiceLedgerRoutes');
 const voiceChatSocket = require('./routes/voiceChatSocket');
 const realtimeVoiceSocket = require('./routes/realtimeVoiceSocket');
 const chatService = require('./services/chatService');
+const { cleanSources } = chatService;
 const voiceService = require('./services/voiceService');
 const { resolveVoice, SAMPLE_LINE } = require('./services/voiceSpeakers');
 const aiController = require('./controllers/aiController');
@@ -332,6 +333,14 @@ app.get('/api/rag/stats', async (req, res) => {
 
 // Single Unified Text & Multimodal Chat POST Endpoint
 async function handleChat(req, res) {
+  // BUG 3 FIX: Auth check runs first — before any RAG, embedding, or model work.
+  // The app.use('/api', requireAuth) middleware at line ~143 already runs before
+  // this handler in Express's pipeline, but we add an explicit early guard here
+  // so the handler is self-contained and fast even if middleware ordering ever changes.
+  if (!req.user) {
+    return res.status(401).json({ success: false, code: 'UNAUTHORIZED' });
+  }
+
   const userMessage = req.body.message || req.body.query || '';
   const history = req.body.history || req.body.conversation_history || req.body.messages || [];
   const sessionId = req.body.sessionId || req.body.session_id;
@@ -341,7 +350,7 @@ async function handleChat(req, res) {
   const replyLanguage = req.body.replyLanguage === 'en' ? 'en' : 'or';
 
   if (sessionId) sessionData.sessionId = sessionId;
-  if (req.user) sessionData.ownerId = req.user.id;
+  sessionData.ownerId = req.user.id;
 
   console.log(`[Server] Received message input for /api/chat: "${userMessage?.substring(0, 60)}" (Session: ${sessionId || 'new'}, Image: ${Boolean(image)})`);
 
@@ -372,6 +381,12 @@ async function handleChat(req, res) {
     // Support both string and object responses
     const responseText = typeof result === 'string' ? result : result.response;
     const resultSessionId = result.sessionId || sessionId;
+    const ragContextUsed = result.ragContextUsed || false;
+
+    // BUG 1 FIX: Apply cleanSources as a server-side safety layer on the way out.
+    // chatService already calls cleanSources() internally; this second pass catches
+    // any edge-case where sources arrive uncleaned (e.g. voice/fallback code paths).
+    const cleanedSources = cleanSources(result.ragSources || [], ragContextUsed);
 
     return res.status(200).json({
       success: true,
@@ -379,8 +394,8 @@ async function handleChat(req, res) {
       message: responseText,
       sessionId: resultSessionId,
       transliteration: result.transliteration || null,
-      ragSources: result.ragSources || [],
-      ragContextUsed: result.ragContextUsed || false,
+      ragSources: cleanedSources,
+      ragContextUsed,
       knowledgeNote: result.knowledgeNote || null,
       session: result.session || null
     });
@@ -397,6 +412,12 @@ async function handleChat(req, res) {
 }
 
 app.post('/api/chat/stream', async (req, res) => {
+  // BUG 3 FIX: Reject unauthenticated requests immediately — before SSE headers are
+  // flushed or any expensive work (RAG, embeddings, live data, Gemini) starts.
+  if (!req.user) {
+    return res.status(401).json({ success: false, code: 'UNAUTHORIZED' });
+  }
+
   const userMessage = req.body.message || req.body.query || '';
   const history = req.body.history || [];
   const sessionId = req.body.sessionId || req.body.session_id;
@@ -405,7 +426,7 @@ app.post('/api/chat/stream', async (req, res) => {
   const useRag = req.body.useRag !== false;
   const replyLanguage = req.body.replyLanguage === 'en' ? 'en' : 'or';
   if (sessionId) sessionData.sessionId = sessionId;
-  if (req.user) sessionData.ownerId = req.user.id;
+  sessionData.ownerId = req.user.id;
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -454,12 +475,15 @@ app.post('/api/chat/stream', async (req, res) => {
       }
     );
     if (!abort.signal.aborted) {
+      const ragContextUsed = result.ragContextUsed || false;
+      // BUG 1 FIX: Apply cleanSources as a server-side safety layer on the way out.
+      const cleanedSources = cleanSources(result.ragSources || [], ragContextUsed);
       send('done', {
         response: result.response,
         sessionId: result.sessionId,
         transliteration: result.transliteration || null,
-        ragSources: result.ragSources || [],
-        ragContextUsed: result.ragContextUsed || false,
+        ragSources: cleanedSources,
+        ragContextUsed,
         knowledgeNote: result.knowledgeNote || null,
         aborted: Boolean(result.aborted),
       });

@@ -196,6 +196,64 @@ function ragWasUsed(ragContext, ragSources) {
   return Boolean(ragSources.length > 0 || (ragContext && !ragContext.includes('No explicit matching')));
 }
 
+/**
+ * Clean and deduplicate a list of source citations before sending to the client.
+ *
+ * Rules (per spec):
+ *  1. Normalize each entry to a plain string (handles both strings and {title,name,url} objects).
+ *  2. DELETE internal documents: anything matching master instruction / system prompt patterns.
+ *  3. DELETE bare-domain chips: a value that is only a domain name (no spaces, has a dot) is not a citation.
+ *  4. REMOVE DUPLICATES: case-insensitive, whitespace-normalized.
+ *  5. CAP at 3 sources.
+ *
+ * @param {Array} list - Raw ragSources array
+ * @param {boolean} ragContextUsed - Whether RAG context was actually used in this response
+ * @returns {string[]} - Cleaned, deduplicated, capped source list (empty when no context used)
+ */
+function cleanSources(list, ragContextUsed) {
+  // If the answer didn't use retrieved context, show no chips at all.
+  if (!ragContextUsed) return [];
+  if (!Array.isArray(list) || list.length === 0) return [];
+
+  // Regex patterns for content that must never be shown to users
+  const INTERNAL_RE = /master\s*instruction|system\s*prompt|internal\s*(doc|document|instruction)|instruction\s*#\s*\d+/i;
+  // A bare domain: no spaces, contains a dot, optional trailing /path — but has NO meaningful page title words
+  const BARE_DOMAIN_RE = /^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z]{2,})+\/?$/i;
+
+  const seen = new Set();
+  const cleaned = [];
+
+  for (const item of list) {
+    // 1. Normalize to string
+    let title = '';
+    if (typeof item === 'string') {
+      title = item.trim();
+    } else if (item && typeof item === 'object') {
+      title = String(item.title || item.name || item.url || '').trim();
+    }
+
+    if (!title) continue;
+
+    // 2. Drop internal documents
+    if (INTERNAL_RE.test(title)) continue;
+
+    // 3. Drop bare-domain chips (e.g. "youtube.com", "instagram.com", "odisha.news")
+    if (BARE_DOMAIN_RE.test(title)) continue;
+
+    // 4. Deduplicate (case-insensitive, collapse whitespace)
+    const key = title.toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    cleaned.push(title);
+
+    // 5. Cap at 3
+    if (cleaned.length === 3) break;
+  }
+
+  return cleaned;
+}
+
 
 
 /**
@@ -357,7 +415,7 @@ async function generateUniversalResponse(userMessage, historyOrSessionId = [], s
           response: text,
           sessionId,
           transliteration: transliterationInfo,
-          ragSources: ragSources.length > 0 ? ragSources : (ragContext.length > 30 && ragContextUsed ? ['Utkal Verified Knowledge Base'] : []),
+          ragSources: cleanSources(ragSources, ragContextUsed),
           ragContextUsed,
           knowledgeNote,
           session: {
@@ -456,7 +514,7 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
   for (const model of FALLBACK_MODELS) {
     try {
       if (signal?.aborted) {
-        return { response: '', sessionId, ragSources, transliteration: transliterationInfo, ragContextUsed, knowledgeNote, aborted: true };
+        return { response: '', sessionId, ragSources: cleanSources(ragSources, ragContextUsed), transliteration: transliterationInfo, ragContextUsed, knowledgeNote, aborted: true };
       }
 
       const stream = await ai.models.generateContentStream({
@@ -472,7 +530,7 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
       let full = '';
       for await (const chunk of stream) {
         if (signal?.aborted) {
-          return { response: full, sessionId, ragSources, transliteration: transliterationInfo, ragContextUsed, knowledgeNote, aborted: true };
+          return { response: full, sessionId, ragSources: cleanSources(ragSources, ragContextUsed), transliteration: transliterationInfo, ragContextUsed, knowledgeNote, aborted: true };
         }
         const delta = chunk?.text || '';
         if (delta) {
@@ -486,7 +544,7 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
         return {
           response: full,
           sessionId,
-          ragSources,
+          ragSources: cleanSources(ragSources, ragContextUsed),
           transliteration: transliterationInfo,
           ragContextUsed,
           knowledgeNote,
@@ -509,6 +567,7 @@ module.exports = {
   generateUniversalResponse,
   generateUniversalResponseStream,
   answerQuestion,
+  cleanSources,
   sessionMemoryService,
   transliterationService,
 };

@@ -182,6 +182,40 @@
     return String(value || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  /**
+   * Client-side mirror of the server's cleanSources().
+   * Cleans source chips before rendering so old saved chats are also sanitised.
+   *
+   * Rules (must stay in sync with services/chatService.js cleanSources):
+   *  1. Normalise each entry to a plain string.
+   *  2. Drop internal documents (master instruction / system prompt titles).
+   *  3. Drop bare-domain chips (e.g. "youtube.com", "instagram.com").
+   *  4. Deduplicate case-insensitively.
+   *  5. Cap at 3.
+   */
+  const INTERNAL_RE = /master\s*instruction|system\s*prompt|internal\s*(doc|document|instruction)|instruction\s*#\s*\d+/i;
+  const BARE_DOMAIN_RE = /^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z]{2,})+\/?$/i;
+
+  function clientCleanSources(list) {
+    if (!Array.isArray(list) || list.length === 0) return [];
+    const seen = new Set();
+    const out = [];
+    for (const item of list) {
+      let title = typeof item === 'string' ? item.trim()
+        : item && typeof item === 'object' ? String(item.title || item.name || item.url || '').trim()
+        : '';
+      if (!title) continue;
+      if (INTERNAL_RE.test(title)) continue;
+      if (BARE_DOMAIN_RE.test(title)) continue;
+      const key = title.toLowerCase().replace(/\s+/g, ' ');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(title);
+      if (out.length === 3) break;
+    }
+    return out;
+  }
+
   function renderMarkdown(text) {
     let html = escapeHtml(text);
     html = html.replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code}</code></pre>`);
@@ -225,9 +259,8 @@
           : '';
         return `<div class="bubble user">${escapeHtml(msg.text)}</div>${hint}`;
       }
-      const sources = (msg.sources || []).map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join('');
       const note = msg.knowledgeNote ? `<div class="note">${escapeHtml(msg.knowledgeNote)}</div>` : '';
-      return `<div class="bubble assistant">${msg.pending ? escapeHtml(msg.text) : renderMarkdown(msg.text)}</div>${sources ? `<div class="sources">${sources}</div>` : ''}${note}`;
+      return `<div class="bubble assistant">${msg.pending ? escapeHtml(msg.text) : renderMarkdown(msg.text)}</div>${note}`;
     }).join('');
     box.scrollTop = box.scrollHeight;
     renderSessions();
@@ -350,7 +383,7 @@
         done(data) {
           pending.pending = false;
           pending.text = data.response || pending.text;
-          pending.sources = data.ragSources || [];
+          pending.sources = clientCleanSources(data.ragSources || []);
           pending.knowledgeNote = data.knowledgeNote || null;
           const userMsg = session.messages[session.messages.length - 2];
           if (userMsg && data.transliteration) userMsg.transliteration = data.transliteration;
@@ -376,7 +409,7 @@
         if (!fallback.ok || !data.success) throw new Error(data.message || t('answerFail'));
         pending.pending = false;
         pending.text = data.response || data.message;
-        pending.sources = data.ragSources || [];
+        pending.sources = clientCleanSources(data.ragSources || []);
         pending.knowledgeNote = data.knowledgeNote || null;
         const userMsg = session.messages[session.messages.length - 2];
         if (userMsg && data.transliteration) userMsg.transliteration = data.transliteration;
