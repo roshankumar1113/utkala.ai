@@ -260,7 +260,10 @@
         return `<div class="bubble user">${escapeHtml(msg.text)}</div>${hint}`;
       }
       const note = msg.knowledgeNote ? `<div class="note">${escapeHtml(msg.knowledgeNote)}</div>` : '';
-      return `<div class="bubble assistant">${msg.pending ? escapeHtml(msg.text) : renderMarkdown(msg.text)}</div>${note}`;
+      const chips = !msg.pending && Array.isArray(msg.sources) && msg.sources.length
+        ? `<div class="sources">${clientCleanSources(msg.sources).map((s) => `<span class="chip">${escapeHtml(s)}</span>`).join('')}</div>`
+        : '';
+      return `<div class="bubble assistant">${msg.pending ? escapeHtml(msg.text) : renderMarkdown(msg.text)}</div>${chips}${note}`;
     }).join('');
     box.scrollTop = box.scrollHeight;
     renderSessions();

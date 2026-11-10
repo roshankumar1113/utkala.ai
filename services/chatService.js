@@ -9,7 +9,7 @@ const { GoogleGenAI } = require('@google/genai');
 const sessionMemoryService = require('./sessionMemoryService');
 const transliterationService = require('./transliterationService');
 const ragService = require('./ragService');
-const { fetchLiveContext, LIVE_PROMPT_RULE } = require('./liveDataService');
+const { fetchLiveContext, LIVE_PROMPT_RULE, isAnyLiveQuery } = require('./liveDataService');
 
 let ai;
 try {
@@ -344,35 +344,59 @@ async function generateUniversalResponse(userMessage, historyOrSessionId = [], s
   const replyLanguage = normalizeReplyLanguage(options.replyLanguage);
   const { effectiveMessage, transliterationInfo } = await resolveUserText(userMessage, session, replyLanguage);
 
-  // 1. RAG Knowledge Retrieval
+  // 1. RAG & Live Routing Priority
+  const queryText = effectiveMessage || userMessage;
+  const isScheme = /subhadra|ସୁଭଦ୍ରା|pmegp|ପିଏମଇଜିପି|cgtmse|ସିଜିଟିଏମଏସଇ|pmfme|ପିଏମଏଫଏମଇ|udyam|ଉଦ୍ୟମ|kalia|କାଳିଆ|bsky|ବିଏସକେୱାଇ|ration|ରେସନ|yojana|ଯୋଜନା|subsidy|ସବସିଡି|eligibility|ଯୋଗ୍ୟତା|loan|ଋଣ/i.test(queryText);
+  const queryIsLive = isAnyLiveQuery(queryText);
+
   let ragContext = '';
   let ragSources = [];
-  try {
-    if (options.useRag !== false) {
-      ragContext = ragService.retrieveContext(effectiveMessage) || '';
-      if (ragContext && !ragContext.includes('No explicit matching local state schema documents')) {
-        // Extract titles for citations
-        const matches = ragContext.match(/Title:\s*(.+)/g);
-        if (matches) {
-          ragSources = matches.map(m => m.replace(/Title:\s*/, '').trim());
+
+  // Live query priority: If query is live and NOT asking about a static scheme,
+  // query live collectors exclusively to avoid irrelevant scheme chips (e.g. Subhadra/Wikipedia for weather/gold).
+  if (queryIsLive && !isScheme) {
+    try {
+      const live = await fetchLiveContext(queryText);
+      if (live) {
+        ragContext = live.contextText;
+        if (Array.isArray(live.sources)) {
+          ragSources.push(...live.sources);
         }
       }
+    } catch (liveErr) {
+      console.warn('[ChatService LiveData] fetch warn:', liveErr.message);
     }
-  } catch (ragErr) {
-    console.warn('[ChatService RAG] Retrieval warn:', ragErr.message);
-  }
+  } else {
+    // Static scheme / knowledge query
+    try {
+      if (options.useRag !== false) {
+        ragContext = ragService.retrieveContext(effectiveMessage) || '';
+        if (ragContext && !ragContext.includes('No explicit matching local state schema documents')) {
+          // Extract titles for citations
+          const matches = ragContext.match(/Title:\s*(.+)/g);
+          if (matches) {
+            ragSources = matches.map(m => m.replace(/Title:\s*/, '').trim());
+          }
+        }
+      }
+    } catch (ragErr) {
+      console.warn('[ChatService RAG] Retrieval warn:', ragErr.message);
+    }
 
-  // 1b. Live Context Fetch (Open-Meteo weather and Tavily web search)
-  try {
-    const live = await fetchLiveContext(effectiveMessage || userMessage);
-    if (live) {
-      ragContext = ragContext ? `${ragContext}\n\n${live.contextText}` : live.contextText;
-      if (Array.isArray(live.sources)) {
-        ragSources.push(...live.sources);
+    // If query has live aspects alongside scheme, augment with live context
+    if (queryIsLive) {
+      try {
+        const live = await fetchLiveContext(queryText);
+        if (live) {
+          ragContext = ragContext ? `${ragContext}\n\n${live.contextText}` : live.contextText;
+          if (Array.isArray(live.sources)) {
+            ragSources.push(...live.sources);
+          }
+        }
+      } catch (liveErr) {
+        console.warn('[ChatService LiveData] fetch warn:', liveErr.message);
       }
     }
-  } catch (liveErr) {
-    console.warn('[ChatService LiveData] fetch warn:', liveErr.message);
   }
 
   const history = Array.isArray(historyOrSessionId) && historyOrSessionId.length > 0
@@ -391,7 +415,7 @@ async function generateUniversalResponse(userMessage, historyOrSessionId = [], s
       console.log(`[ChatService] Generating with model ${model} for session ${sessionId} (lang=${replyLanguage})...`);
 
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Chat request timed out')), 18000)
+        setTimeout(() => reject(new Error('Chat request timed out')), 25000)
       );
 
       const apiCall = ai.models.generateContent({
@@ -430,6 +454,9 @@ async function generateUniversalResponse(userMessage, historyOrSessionId = [], s
     } catch (err) {
       lastError = err;
       console.warn(`[ChatService] Model ${model} failed: ${err.message}`);
+      if (/503|high demand|overloaded|rate limit|429/i.test(err.message)) {
+        await new Promise(r => setTimeout(r, 1200));
+      }
     }
   }
 
@@ -476,29 +503,49 @@ async function generateUniversalResponseStream(userMessage, opts = {}) {
   const replyLanguage = normalizeReplyLanguage(opts.replyLanguage);
   const { effectiveMessage, transliterationInfo } = await resolveUserText(userMessage, session, replyLanguage, { spoken: Boolean(opts.spoken) });
 
+  const queryText = effectiveMessage || userMessage;
+  const isScheme = /subhadra|ସୁଭଦ୍ରା|pmegp|ପିଏମଇଜିପି|cgtmse|ସିଜିଟିଏମଏସଇ|pmfme|ପିଏମଏଫଏମଇ|udyam|ଉଦ୍ୟମ|kalia|କାଳିଆ|bsky|ବିଏସକେୱାଇ|ration|ରେସନ|yojana|ଯୋଜନା|subsidy|ସବସିଡି|eligibility|ଯୋଗ୍ୟତା|loan|ଋଣ/i.test(queryText);
+  const queryIsLive = isAnyLiveQuery(queryText);
+
   let ragContext = '';
   let ragSources = [];
-  try {
-    if (opts.useRag !== false) {
-      ragContext = ragService.retrieveContext(effectiveMessage) || '';
-      const matches = ragContext.match(/Title:\s*(.+)/g);
-      if (matches) ragSources = matches.map((m) => m.replace(/Title:\s*/, '').trim());
-    }
-  } catch (e) {
-    console.warn('[ChatService Stream RAG] warn:', e.message);
-  }
 
-  // Live Context Fetch (Open-Meteo weather and Tavily web search)
-  try {
-    const live = await fetchLiveContext(effectiveMessage || userMessage);
-    if (live) {
-      ragContext = ragContext ? `${ragContext}\n\n${live.contextText}` : live.contextText;
-      if (Array.isArray(live.sources)) {
-        ragSources.push(...live.sources);
+  if (queryIsLive && !isScheme) {
+    try {
+      const live = await fetchLiveContext(queryText);
+      if (live) {
+        ragContext = live.contextText;
+        if (Array.isArray(live.sources)) {
+          ragSources.push(...live.sources);
+        }
+      }
+    } catch (liveErr) {
+      console.warn('[ChatService Stream LiveData] fetch warn:', liveErr.message);
+    }
+  } else {
+    try {
+      if (opts.useRag !== false) {
+        ragContext = ragService.retrieveContext(effectiveMessage) || '';
+        const matches = ragContext.match(/Title:\s*(.+)/g);
+        if (matches) ragSources = matches.map((m) => m.replace(/Title:\s*/, '').trim());
+      }
+    } catch (e) {
+      console.warn('[ChatService Stream RAG] warn:', e.message);
+    }
+
+    if (queryIsLive) {
+      try {
+        const live = await fetchLiveContext(queryText);
+        if (live) {
+          ragContext = ragContext ? `${ragContext}\n\n${live.contextText}` : live.contextText;
+          if (Array.isArray(live.sources)) {
+            ragSources.push(...live.sources);
+          }
+        }
+      } catch (liveErr) {
+        console.warn('[ChatService Stream LiveData] fetch warn:', liveErr.message);
       }
     }
-  } catch (liveErr) {
-    console.warn('[ChatService Stream LiveData] fetch warn:', liveErr.message);
   }
 
   const historyLimit = opts.spoken ? 6 : 15;

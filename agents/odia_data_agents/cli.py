@@ -56,7 +56,7 @@ def main():
     parser.add_argument(
         "--backend",
         type=str,
-        default="ngram",
+        default="sentence-transformers",
         choices=["ngram", "gemini", "sentence-transformers"],
         help="Embedding backend for dimension checks: ngram (128d, free local) or gemini (768d)",
     )

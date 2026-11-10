@@ -9,6 +9,15 @@ const fs = require('fs');
 const path = require('path');
 
 const SESSION_MS = 14 * 24 * 60 * 60 * 1000;
+
+// In-memory session cache — avoids synchronous disk reads on every auth check.
+// TTL of 5 s is short enough to honour logouts quickly while still cutting the
+// filesystem hit that was causing 6–16 s delays on Render's slow storage.
+const SESSION_CACHE_TTL_MS = 5000;
+let _sessionCache = null;
+let _sessionCacheTs = 0;
+let _usersCache = null;
+let _usersCacheTs = 0;
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const KEYLEN = 32;
 
@@ -39,16 +48,23 @@ function writeJson(file, data) {
 }
 
 function loadUsers() {
+  const now = Date.now();
+  if (_usersCache && (now - _usersCacheTs) < SESSION_CACHE_TTL_MS) return _usersCache;
   const data = readJson(usersFile(), { users: [] });
   if (!Array.isArray(data.users)) data.users = [];
+  _usersCache = data;
+  _usersCacheTs = now;
   return data;
 }
 
 function loadSessions() {
+  const now = Date.now();
+  if (_sessionCache && (now - _sessionCacheTs) < SESSION_CACHE_TTL_MS) return _sessionCache;
   const data = readJson(sessionsFile(), { sessions: [] });
   if (!Array.isArray(data.sessions)) data.sessions = [];
-  const now = Date.now();
   data.sessions = data.sessions.filter((row) => row && row.expiresAt > now);
+  _sessionCache = data;
+  _sessionCacheTs = now;
   return data;
 }
 
@@ -113,6 +129,9 @@ function createSession(userId) {
     expiresAt: Date.now() + SESSION_MS,
   });
   writeJson(sessionsFile(), data);
+  // Invalidate caches so next request sees the new session immediately.
+  _sessionCache = null;
+  _usersCache = null;
   return token;
 }
 
@@ -161,6 +180,9 @@ function logout(token) {
   const data = loadSessions();
   data.sessions = data.sessions.filter((row) => row.id !== id);
   writeJson(sessionsFile(), data);
+  // Invalidate caches so the next request doesn't serve a stale valid session.
+  _sessionCache = null;
+  _usersCache = null;
 }
 
 function userFromToken(token) {
@@ -191,6 +213,14 @@ function readCookie(header, name) {
 function userFromCookieHeader(header) {
   return userFromToken(readCookie(header, 'utkal_session'));
 }
+
+// Pre-warm caches at startup so the first incoming request is not blocked by
+// synchronous disk reads of sessions.json and users.json.  setImmediate defers
+// until the event loop is free, after module loading is complete.
+setImmediate(() => {
+  try { loadSessions(); } catch (_) {}
+  try { loadUsers(); } catch (_) {}
+});
 
 module.exports = {
   signup,

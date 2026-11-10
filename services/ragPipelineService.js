@@ -33,7 +33,25 @@ function chunkText(text, chunkSize = CHUNK_SIZE, overlap = OVERLAP) {
  * This is a lightweight fallback that works without a model download.
  * For production, replace with @xenova/transformers or the Python RAG service.
  */
-function generateSimpleEmbedding(text, dim = 128) {
+let xenovaPipeline = null;
+
+async function getEmbedding(text) {
+  try {
+    if (!xenovaPipeline) {
+      const { pipeline } = require('@xenova/transformers');
+      xenovaPipeline = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    }
+    const output = await xenovaPipeline(text, { pooling: 'mean', normalize: true });
+    return Array.from(output.data);
+  } catch (err) {
+    return generateSimpleEmbedding(text, 384);
+  }
+}
+
+/**
+ * Generate a 384-dim embedding matching Xenova all-MiniLM-L6-v2.
+ */
+function generateSimpleEmbedding(text, dim = 384) {
   const vec = new Array(dim).fill(0);
   const t = text.toLowerCase();
   for (let i = 0; i < t.length - 1; i++) {
@@ -86,7 +104,7 @@ class RAGPipeline {
         allChunks.push({
           id: `chunk_${ts}_${docIdx}_${cIdx}`,
           text: chunkText_,
-          embedding: generateSimpleEmbedding(chunkText_),
+          embedding: generateSimpleEmbedding(chunkText_, 384),
           metadata: {
             title: doc.title,
             source: doc.source,
@@ -119,7 +137,7 @@ class RAGPipeline {
     }
     await this.vectorStore.connect();
 
-    const queryEmbedding = generateSimpleEmbedding(userQuery);
+    const queryEmbedding = generateSimpleEmbedding(userQuery, 384);
     const results = await this.vectorStore.searchSimilar(queryEmbedding, topK);
 
     return {

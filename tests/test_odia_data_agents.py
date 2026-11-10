@@ -25,12 +25,14 @@ from agents.odia_data_agents.pipeline import OdiaAgentPipeline
 # ── 1. Security & SSRF Protection ─────────────────────────────────────────────
 
 def test_security_valid_public_urls():
-    # Public domain names
-    safe, msg = is_safe_public_url("https://subhadra.odisha.gov.in")
-    assert safe is True, f"Expected safe, got: {msg}"
+    # Public domain names - mock DNS for offline unit test
+    import socket
+    with patch("socket.getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("164.100.140.85", 443))]):
+        safe, msg = is_safe_public_url("https://subhadra.odisha.gov.in")
+        assert safe is True, f"Expected safe, got: {msg}"
 
-    safe, msg = is_safe_public_url("https://or.wikipedia.org/wiki/Odia")
-    assert safe is True, f"Expected safe, got: {msg}"
+        safe, msg = is_safe_public_url("https://or.wikipedia.org/wiki/Odia")
+        assert safe is True, f"Expected safe, got: {msg}"
 
 
 def test_security_ssrf_localhost_blocked():

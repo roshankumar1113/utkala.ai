@@ -47,3 +47,7 @@ data/my_odia_run/
 # Account passwords and session tokens
 data/users.json
 data/sessions.json
+
+# Runtime live audit log and vector backups
+data/live_audit_log.jsonl
+*.bak*

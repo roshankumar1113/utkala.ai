@@ -1,122 +1,85 @@
 /**
- * liveDataService.js
- * Fetches real-time internet context (Live Weather via Open-Meteo and Web Search via Tavily).
- * Provides LIVE_PROMPT_RULE for strict live-data grounding and citation compliance.
+ * services/liveDataService.js
+ * Comprehensive Live Odia Data Orchestration Engine.
+ * 
+ * Collectors:
+ *  1. Weather / IMD: Open-Meteo live API + IMD Bhubaneswar bulletins (all 30 districts)
+ *  2. SRC Odisha: Special Relief Commissioner alerts (cyclone, flood, heavy rain)
+ *  3. Gold & Silver: Daily bullion rates (24K / 22K per gram) via Goodreturns/NDTV
+ *  4. Mandi Rates: Agmarknet & APMC commodity rates (paddy, rice, vegetables)
+ *  5. General Live Fallback: Real-time search via Tavily for other daily rates/news
+ * 
+ * Rules:
+ *  - Live data is NOT permanent RAG content; fetched fresh with short cache.
+ *  - Every answer includes source name and timestamp.
+ *  - Never invent a number. If data is unavailable, declare honestly in Odia.
+ *  - Audit logging to data/live_audit_log.jsonl.
  */
 
 const axios = require('axios');
+const { collectImdWeather, ODISHA_DISTRICTS } = require('./collectors/imdWeatherCollector');
+const { collectSrcAlerts } = require('./collectors/srcAlertsCollector');
+const { collectGoldRates } = require('./collectors/goldRatesCollector');
+const { collectMandiRates } = require('./collectors/mandiRatesCollector');
+const { recordLiveAudit } = require('./liveAuditLog');
 
 const LIVE_PROMPT_RULE = `
-### LIVE DATA RULES (highest priority for current-information questions):
-- The system may include a section titled "LIVE WEATHER" or "LIVE WEB RESULTS"
-  in your context. That data was fetched from the internet just now.
-- If live data is present and covers the question, answer ONLY from it.
-  Always name the source (e.g. "according to NDTV" / "Open-Meteo live data")
-  and say the information is from today.
-- If two live sources give different numbers, show both briefly and say
-  sources differ — do not pick one silently and do not average them.
-- If the question needs current information (today's weather, prices, news,
-  last dates, recent scheme updates) and NO live data section is present,
-  reply exactly in this spirit: "I do not have live information for this
-  right now. Please check the official website." NEVER invent a number,
-  temperature, price, date or amount.
-- Scheme money amounts may only be quoted from the knowledge context or the
-  live results. If an amount is in neither, say "check the official portal
-  for the current amount".
-- For schemes, always say "potentially suitable" — never promise approval.
+### LIVE DATA RULES & CURRENT INFORMATION (MANDATORY & HIGHEST PRIORITY):
+1. The user may ask about current weather, IMD bulletins, SRC cyclone/flood alerts, gold/silver rates, or mandi/crop prices.
+2. If a section titled "[LIVE WEATHER ...]", "[LIVE SRC ODISHA ...]", "[LIVE GOLD ...]", "[LIVE MANDI ...]", or "[LIVE WEB RESULTS]" is present in context, answer ONLY from it.
+3. STRICT SOURCE & TIMESTAMP ATTRIBUTION:
+   - Always cite the exact source name (e.g. "Open-Meteo", "IMD ଭୁବନେଶ୍ୱର", "SRC Odisha", "Goodreturns", "Agmarknet").
+   - Explicitly state that the data is live and current for today.
+   - If sources differ or conflict, prioritize the official government bulletin (IMD/SRC/Agmarknet).
+4. HONESTY GUARANTEE (ZERO HALLUCINATION):
+   - If no live context is present or data is unavailable, state honestly in fluent Odia:
+     "ଏହି ତଥ୍ୟ ବର୍ତ୍ତମାନ ଉପଲବ୍ଧ ନାହିଁ। ଦୟାକରି ସରକାରୀ ପୋର୍ଟାଲ୍ କିମ୍ବା ସମ୍ପୃକ୍ତ ବିଭାଗ ଯାଞ୍ଚ କରନ୍ତୁ।"
+     (English: "I do not have live information for this right now. Please confirm on the official government portal.")
+   - NEVER invent, extrapolate, or guess any temperature, gold rate, mandi price, date, or cyclone alert.
+5. LANGUAGE & UNITS:
+   - Deliver responses in authentic, respectful native Odia script (ଓଡ଼ିଆ) by default (English only if selected).
+   - District names, commodities (e.g. ଧାନ, ସୁନା), and temperatures must be clear and readable.
+   - For government schemes, always state "potentially suitable" (ସମ୍ଭାବ୍ୟ ଉପଯୁକ୍ତ).
 `;
 
-const ODISHA_LOCATIONS = [
-  { name: 'Bhubaneswar', alt: /bhubaneswar|ଭୁବନେଶ୍ୱର|ଭୁବନେଶ୍ବର/i, lat: 20.2961, lon: 85.8245 },
-  { name: 'Cuttack', alt: /cuttack|କଟକ/i, lat: 20.4625, lon: 85.8828 },
-  { name: 'Puri', alt: /puri|ପୁରୀ/i, lat: 19.8135, lon: 85.8312 },
-  { name: 'Rourkela', alt: /rourkela|ରାଉରକେଲା/i, lat: 22.2604, lon: 84.8536 },
-  { name: 'Sambalpur', alt: /sambalpur|ସମ୍ବଲପୁର/i, lat: 21.4669, lon: 83.9812 },
-  { name: 'Berhampur', alt: /berhampur|brahmapur|ବ୍ରହ୍ମପୁର/i, lat: 19.3149, lon: 84.7941 },
-  { name: 'Balasore', alt: /balasore|baleswar|ବାଲେଶ୍ୱର|ବାଲେଶ୍ବର/i, lat: 21.4934, lon: 86.9135 },
-  { name: 'Baripada', alt: /baripada|ବାରିପଦା/i, lat: 21.9346, lon: 86.7368 },
-  { name: 'Koraput', alt: /koraput|କୋରାପୁଟ/i, lat: 18.8135, lon: 82.7123 },
-  { name: 'Jharsuguda', alt: /jharsuguda|ଝାରସୁଗୁଡ଼ା/i, lat: 21.8554, lon: 84.0062 },
-  { name: 'Angul', alt: /angul|ଅନୁଗୋଳ/i, lat: 20.8444, lon: 85.1511 },
-];
-
-function weatherCodeText(code) {
-  if (code === 0) return 'Clear sky / ସ୍ୱଚ୍ଛ ଆକାଶ';
-  if ([1, 2, 3].includes(code)) return 'Partly cloudy / ଆଂଶିକ ମେଘୁଆ';
-  if ([45, 48].includes(code)) return 'Foggy / କୁହୁଡ଼ି';
-  if ([51, 53, 55].includes(code)) return 'Light drizzle / ହାଲୁକା ବର୍ଷା';
-  if ([61, 63, 65].includes(code)) return 'Rain / ବର୍ଷା';
-  if ([80, 81, 82].includes(code)) return 'Rain showers / ବର୍ଷା ଝଲକ';
-  if ([95, 96, 99].includes(code)) return 'Thunderstorm / ବିଜୁଳି ଘଡ଼ଘଡ଼ି ସହ ବର୍ଷା';
-  return 'Cloudy / ମେଘାଚ୍ଛନ୍ନ';
-}
-
+// Intent classification helpers
 function isWeatherQuery(text) {
-  return /(weather|temperature|forecast|rainfall?|monsoon|climate|humid|panipat|tapa|barsha|tapamatra|ପାଣିପାଗ|ତାପମାତ୍ରା|ବର୍ଷା|ଖରା|କୁହୁଡ଼ି|ପବନ)/i.test(text || '');
+  return /(weather|temperature|forecast|rainfall?|monsoon|climate|humid|panipat|tapa|barsha|tapamatra|storm|ପାଣିପାଗ|ତାପମାତ୍ରା|ବର୍ଷା|ଖରା|କୁହୁଡ଼ି|ପବନ|ଶୀତ|ଗ୍ରୀଷ୍ମ|ପାଗ)/i.test(text || '');
 }
 
-function isLiveSearchQuery(text) {
-  return /(today|current|now|latest|recent|news|update|status|price|rate|mandigate|deadline|last date|gold rate|petrol|diesel|score|match|winner|result|ଆଜି|ବର୍ତ୍ତମାନ|ତାଜା|ନୂଆ|ଖବର|ଦର|ମୂଲ୍ୟ|ତାରିଖ|ଶେଷ ତାରିଖ|ଅପଡେଟ|ଫଳାଫଳ)/i.test(text || '');
+function isSrcAlertQuery(text) {
+  return /(src|special relief commissioner|cyclone|flood|alert|warning|disaster|heavy rain|calamity|ବାତ୍ୟା|ବନ୍ୟା|ସତର୍କ|ସତର୍କତା|ବିପର୍ଯ୍ୟୟ|ଜରୁରୀକାଳୀନ)/i.test(text || '');
 }
 
+function isGoldQuery(text) {
+  return /(gold|silver|bullion|24k|22k|carat|karat|sona|rupa|per gram|gold rate|silver rate|ସୁନା|ରୂପା|ସୁନା ଦର|ରୁପା|ଗହଣା)/i.test(text || '');
+}
+
+function isMandiQuery(text) {
+  return /(mandi|agmarknet|paddy|dhan|rice|msp|crop price|market rate|vegetable price|onion|potato|ମଣ୍ଡି|ଧାନ|ଚାଉଳ|ଫସଲ ଦର|ସହାୟକ ମୂଲ୍ୟ|ଆଳୁ|ପିଆଜ)/i.test(text || '');
+}
+
+function isGeneralLiveQuery(text) {
+  return /(today|current|now|latest|recent|news|update|status|price|rate|deadline|petrol|diesel|ଆଜି|ବର୍ତ୍ତମାନ|ତାଜା|ନୂଆ|ଖବର|ଦର|ମୂଲ୍ୟ|ତାରିଖ|ଅପଡେଟ)/i.test(text || '');
+}
+
+const isLiveSearchQuery = isGeneralLiveQuery;
+
+function isAnyLiveQuery(text) {
+  return isWeatherQuery(text) || isSrcAlertQuery(text) || isGoldQuery(text) || isMandiQuery(text) || isGeneralLiveQuery(text);
+}
+
+// Backward-compatible fetchWeather (delegates to imdWeatherCollector)
 async function fetchWeather(userMessage) {
-  try {
-    let loc = ODISHA_LOCATIONS[0]; // Default to Bhubaneswar
-    for (const item of ODISHA_LOCATIONS) {
-      if (item.alt.test(userMessage)) {
-        loc = item;
-        break;
-      }
-    }
-
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto`;
-    const resp = await axios.get(url, { timeout: 4000 });
-    const current = resp.data?.current;
-    if (!current) return null;
-
-    const todayDate = new Date().toISOString().split('T')[0];
-    const condition = weatherCodeText(current.weather_code);
-
-    const contextText = [
-      `[LIVE WEATHER - Open-Meteo live data]`,
-      `Location: ${loc.name}, Odisha`,
-      `Date: ${todayDate} (Fetched live from Open-Meteo just now)`,
-      `Current Temperature: ${current.temperature_2m}°C`,
-      `Feels Like: ${current.apparent_temperature}°C`,
-      `Weather Condition: ${condition}`,
-      `Relative Humidity: ${current.relative_humidity_2m}%`,
-      `Wind Speed: ${current.wind_speed_10m} km/h`,
-      `Source: Open-Meteo live data`,
-    ].join('\n');
-
-    return {
-      contextText,
-      sources: ['Open-Meteo live data'],
-    };
-  } catch (err) {
-    console.warn('[LiveDataService Weather] fetch error:', err.message);
-    return null;
-  }
+  const data = await collectImdWeather(userMessage);
+  if (!data) return null;
+  return {
+    contextText: `[LIVE WEATHER - Open-Meteo live data]\n${data.contextText}`,
+    sources: Array.from(new Set(['Open-Meteo live data', ...(data.sources || [])])),
+  };
 }
 
-function cleanSourceName(url, title) {
-  try {
-    const domain = new URL(url).hostname.replace(/^www\./, '');
-    if (/ndtv/i.test(domain)) return 'NDTV';
-    if (/sambad/i.test(domain)) return 'Sambad';
-    if (/otv|odishatv/i.test(domain)) return 'Odisha TV';
-    if (/dharitri/i.test(domain)) return 'Dharitri';
-    if (/prameya/i.test(domain)) return 'Prameya';
-    if (/thehindu/i.test(domain)) return 'The Hindu';
-    if (/indianexpress/i.test(domain)) return 'Indian Express';
-    if (/timesofindia|indiatimes/i.test(domain)) return 'Times of India';
-    if (/odisha\.gov\.in/i.test(domain)) return 'Odisha Government Portal';
-    return domain || title || 'Live Web Search';
-  } catch (_) {
-    return title || 'Live Web Search';
-  }
-}
-
+// General Web Search via Tavily
 async function fetchWebSearch(userMessage) {
   const tavilyKey = process.env.TAVILY_API_KEY;
   if (!tavilyKey || tavilyKey.includes('your_') || tavilyKey.includes('placeholder')) {
@@ -124,7 +87,6 @@ async function fetchWebSearch(userMessage) {
   }
 
   try {
-    // Append Odisha context if not already present in search query
     let query = userMessage.trim();
     if (!/odisha|ଓଡ଼ିଶା/i.test(query) && !/india|ଭାରତ/i.test(query)) {
       query = `${query} Odisha`;
@@ -157,7 +119,21 @@ async function fetchWebSearch(userMessage) {
     }
 
     results.forEach((item, idx) => {
-      const srcName = cleanSourceName(item.url, item.title);
+      let srcName = 'Live Web Search';
+      try {
+        const domain = new URL(item.url).hostname.replace(/^www\./, '');
+        if (/ndtv/i.test(domain)) srcName = 'NDTV';
+        else if (/sambad/i.test(domain)) srcName = 'Sambad';
+        else if (/otv|odishatv/i.test(domain)) srcName = 'Odisha TV';
+        else if (/dharitri/i.test(domain)) srcName = 'Dharitri';
+        else if (/prameya/i.test(domain)) srcName = 'Prameya';
+        else if (/thehindu/i.test(domain)) srcName = 'The Hindu';
+        else if (/indianexpress/i.test(domain)) srcName = 'Indian Express';
+        else if (/timesofindia|indiatimes/i.test(domain)) srcName = 'Times of India';
+        else if (/odisha\.gov\.in/i.test(domain)) srcName = 'Odisha Government Portal';
+        else srcName = domain || 'Live Web Source';
+      } catch (_) {}
+
       if (!sourceChips.includes(srcName)) sourceChips.push(srcName);
       resultLines.push(
         `${idx + 1}. [${srcName}] ${item.title}\n   Snippet: ${item.content || item.raw_content || ''}\n   URL: ${item.url}`
@@ -181,60 +157,116 @@ async function fetchWebSearch(userMessage) {
 }
 
 /**
- * Main entry point: Inspects user question and fetches live context if applicable.
- * Weather needs no key (Open-Meteo). Web search uses TAVILY_API_KEY.
- *
- * @param {string} userMessage - User's chat message
+ * Main Live Orchestrator: Detects category, calls dedicated collector,
+ * audits transaction, and returns structured context blocks and source chips.
+ * 
+ * @param {string} userMessage - User query
  * @returns {Promise<{ contextText: string, sources: string[] } | null>}
  */
 async function fetchLiveContext(userMessage) {
   if (!userMessage || typeof userMessage !== 'string') return null;
 
   const weatherNeed = isWeatherQuery(userMessage);
-  const liveNeed = isLiveSearchQuery(userMessage);
+  const srcAlertNeed = isSrcAlertQuery(userMessage);
+  const goldNeed = isGoldQuery(userMessage);
+  const mandiNeed = isMandiQuery(userMessage);
+  const generalLiveNeed = isGeneralLiveQuery(userMessage);
 
-  // If question is neither about weather nor current live events, skip live fetch to preserve speed
-  if (!weatherNeed && !liveNeed) {
+  if (!weatherNeed && !srcAlertNeed && !goldNeed && !mandiNeed && !generalLiveNeed) {
     return null;
   }
 
   const results = [];
   const sources = [];
 
-  // Weather query (Zero-key Open-Meteo)
-  if (weatherNeed) {
-    const weatherData = await fetchWeather(userMessage);
-    if (weatherData) {
-      results.push(weatherData.contextText);
-      sources.push(...weatherData.sources);
-    } else {
-      console.warn('[LiveDataService] fetchWeather returned null — Open-Meteo request failed or timed out. Query:', userMessage.substring(0, 80));
+  // 1. SRC Odisha Disaster & Cyclone Alerts (High Priority)
+  if (srcAlertNeed) {
+    const srcData = await collectSrcAlerts();
+    if (srcData) {
+      results.push(srcData.contextText);
+      sources.push(...srcData.sources);
+      recordLiveAudit({
+        category: 'src_alert',
+        query: userMessage,
+        source: srcData.sources.join(', '),
+        valuePreview: srcData.contextText.slice(0, 150),
+      });
     }
   }
 
-  // Web query via Tavily
-  if (liveNeed) {
-    const tavilyKey = process.env.TAVILY_API_KEY;
-    if (!tavilyKey || tavilyKey.includes('your_') || tavilyKey.includes('placeholder')) {
-      console.warn('[LiveDataService] fetchWebSearch skipped — TAVILY_API_KEY is missing or still a placeholder. Set it in environment variables to enable live web search.');
-    } else {
-      const webData = await fetchWebSearch(userMessage);
-      if (webData) {
-        results.push(webData.contextText);
-        sources.push(...webData.sources);
-      } else {
-        console.warn('[LiveDataService] fetchWebSearch returned null — Tavily request failed or returned no results. Query:', userMessage.substring(0, 80));
-      }
+  // 2. Weather & IMD Bulletins
+  if (weatherNeed) {
+    const weatherData = await collectImdWeather(userMessage);
+    if (weatherData) {
+      results.push(weatherData.contextText);
+      sources.push(...weatherData.sources);
+      recordLiveAudit({
+        category: 'weather',
+        query: userMessage,
+        source: weatherData.sources.join(', '),
+        valuePreview: `${weatherData.location}: ${weatherData.temperature}°C, ${weatherData.conditionOdia}`,
+      });
+    }
+  }
+
+  // 3. Gold & Silver Prices
+  if (goldNeed) {
+    const goldData = await collectGoldRates();
+    if (goldData) {
+      results.push(goldData.contextText);
+      sources.push(...goldData.sources);
+      recordLiveAudit({
+        category: 'gold_rate',
+        query: userMessage,
+        source: goldData.sources.join(', '),
+        valuePreview: goldData.answer ? goldData.answer.slice(0, 150) : 'Gold price retrieved',
+      });
+    }
+  }
+
+  // 4. Mandi & Crop Prices (Paddy, etc.)
+  if (mandiNeed) {
+    const mandiData = await collectMandiRates(userMessage);
+    if (mandiData) {
+      results.push(mandiData.contextText);
+      sources.push(...mandiData.sources);
+      recordLiveAudit({
+        category: 'mandi_rate',
+        query: userMessage,
+        source: mandiData.sources.join(', '),
+        valuePreview: mandiData.answer ? mandiData.answer.slice(0, 150) : 'Mandi rate retrieved',
+      });
+    }
+  }
+
+  // 5. General Live Search Fallback (if specific collector did not match or for other commodities/news)
+  if (generalLiveNeed && !weatherNeed && !srcAlertNeed && !goldNeed && !mandiNeed) {
+    const webData = await fetchWebSearch(userMessage);
+    if (webData) {
+      results.push(webData.contextText);
+      sources.push(...webData.sources);
+      recordLiveAudit({
+        category: 'general_web',
+        query: userMessage,
+        source: webData.sources.join(', '),
+        valuePreview: webData.contextText.slice(0, 150),
+      });
     }
   }
 
   if (results.length === 0) {
-    console.warn('[LiveDataService] fetchLiveContext returning null — all live fetches failed or were skipped. weatherNeed=%s liveNeed=%s', weatherNeed, liveNeed);
+    recordLiveAudit({
+      category: 'live_query_unfulfilled',
+      query: userMessage,
+      source: 'None',
+      valuePreview: 'All live collectors returned null / unavailable',
+      status: 'unfulfilled',
+    });
     return null;
   }
 
   return {
-    contextText: results.join('\n\n'),
+    contextText: results.join('\n\n---\n\n'),
     sources: Array.from(new Set(sources)),
   };
 }
@@ -243,7 +275,16 @@ module.exports = {
   fetchLiveContext,
   LIVE_PROMPT_RULE,
   isWeatherQuery,
+  isSrcAlertQuery,
+  isGoldQuery,
+  isMandiQuery,
+  isGeneralLiveQuery,
   isLiveSearchQuery,
+  isAnyLiveQuery,
   fetchWeather,
   fetchWebSearch,
+  collectImdWeather,
+  collectSrcAlerts,
+  collectGoldRates,
+  collectMandiRates,
 };

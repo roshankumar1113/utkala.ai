@@ -65,7 +65,7 @@ class AgentConfig:
 
     # Indexing & Safety settings
     dry_run: bool = True
-    embedding_backend: str = "ngram"  # "ngram" (128-dim, local free) or "gemini" (768-dim)
+    embedding_backend: str = "sentence-transformers"  # "ngram" (128-dim, local free) or "gemini" (768-dim)
     enforce_vector_dim_match: bool = True
 
     def __post_init__(self):
